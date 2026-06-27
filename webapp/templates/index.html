@@ -56,9 +56,6 @@
   .navbtn { width:auto; flex:1; margin:0; padding:15px; font-size:16px; background:#2f3640; color:var(--txt); }
   .navbtn.primary { background:var(--acc); color:#10210f; }
   .navbtn:disabled { opacity:.35; cursor:default; }
-  .transit { color:var(--mut); font-size:12.5px; padding:2px 0 6px 8px; }
-  .tmap { display:inline-block; margin:1px 8px 1px 0; white-space:nowrap; }
-  .tmap .coord { font-weight:600; }
   .live-top { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
   .chip { width:auto; margin:0 2px; padding:4px 11px; font-size:13px; font-weight:700; background:#2f3640; color:var(--txt); border-radius:6px; }
   .chip.on { background:var(--acc); color:#10210f; }
@@ -188,8 +185,6 @@ function render(d) {
       <td>${move}</td>
       <td>${(s.value||0).toFixed(1)}</td>
       <td>${harvestBadges(s)}</td></tr>`;
-    if (s.transit && s.transit.length)
-      rows += `<tr><td></td><td colspan="4" class="transit">🌾 au passage : ${transitHtml(s)}</td></tr>`;
   });
   resultEl.innerHTML = `
     ${metrics}
@@ -222,13 +217,6 @@ function switchTab(name) {
 function harvestBadges(s) {
   return (s.harvests||[]).map(h => `<span class="badge">${h.resource_name} ×${h.quantity}</span>`).join(' ')
          || '<span class="empty">—</span>';
-}
-function transitHtml(s) {
-  return (s.transit||[]).map(t => {
-    const res = t.harvests.map(h => `${h.resource_name}×${h.quantity}`).join(', ');
-    const cmd = `/travel ${t.world_coords[0]} ${t.world_coords[1]}`;
-    return `<span class="tmap"><span class="coord" data-cmd="${cmd}" title="Copier « ${cmd} »">[${t.world_coords.join(',')}]</span> ${res}</span>`;
-  }).join(' ');
 }
 function dirsHtml(s) {
   return (s.directions||[]).map(x => `<span class="dir">${x}</span>`).join(' ');
@@ -301,11 +289,9 @@ function renderLive() {
   const cur = sess.window[0];
   const move = (cur.directions && cur.directions.length) ? `<div class="big-dirs">${dirsHtml(cur)}</div>`
                                                          : '<span class="empty">tu y es / départ</span>';
-  const preview = sess.window.slice(1).map((s,i) => {
-    let r = `<tr><td>${i+2}</td><td>${coordChip(s)}</td><td>${dirsHtml(s)||'·'}</td><td>${(s.value||0).toFixed(0)}</td><td>${harvestBadges(s)}</td></tr>`;
-    if (s.transit && s.transit.length) r += `<tr><td></td><td colspan="4" class="transit">🌾 ${transitHtml(s)}</td></tr>`;
-    return r;
-  }).join('');
+  const preview = sess.window.slice(1).map((s,i) =>
+    `<tr><td>${i+2}</td><td>${coordChip(s)}</td><td>${dirsHtml(s)||'·'}</td><td>${(s.value||0).toFixed(0)}</td><td>${harvestBadges(s)}</td></tr>`
+  ).join('');
 
   panel.innerHTML = head + `
     <div class="step-card">
@@ -313,7 +299,6 @@ function renderLive() {
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">${coordChip(cur,'big')} ${move}</div>
       <div><div class="step-lab" style="margin-top:10px">À récolter · score ${(cur.value||0).toFixed(1)} %XP</div>
         <div class="step-harv">${harvestBadges(cur)}</div></div>
-      ${cur.transit && cur.transit.length ? `<div><div class="step-lab" style="margin-top:10px">🌾 au passage (gratuit, sur le trajet)</div><div class="transit" style="padding-left:0">${transitHtml(cur)}</div></div>` : ''}
     </div>
     <div class="step-nav">
       <button class="navbtn" data-act="skip">⤳ Sauter</button>

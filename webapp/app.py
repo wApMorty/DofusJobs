@@ -91,8 +91,8 @@ def plan(payload: dict) -> dict:
         commit = payload.get("commit")
         if commit and commit.get("coord") is not None:
             coord = [int(commit["coord"][0]), int(commit["coord"][1])]
-            if commit.get("harvest"):            # advance: harvest transit maps + coord
-                job_xp, visited = f.advance(job_xp, visited, pos, coord)
+            if commit.get("harvest"):            # advance: harvest this map, move onto it
+                job_xp, visited = f.advance(job_xp, visited, coord)
                 pos = coord
             else:
                 visited.append(coord)            # skip: just don't suggest it again

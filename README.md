@@ -138,9 +138,10 @@ python3 -m webapp.app --open               # + ouvre le navigateur automatiqueme
 Deux vues :
 - **Liste** — la route complète d'un coup (glouton) : maps ordonnées, **directions
   lisibles** (`→×2 ↑`, vrai chemin BFS), niveaux gagnés par métier, écrans, vitesse
-  (%XP/écran), **score %XP** par map, et les **récoltes « au passage »** : les maps
-  intermédiaires traversées sur le trajet BFS qui portent des ressources éligibles
-  sont récoltées **gratuitement** (tu passes dessus de toute façon).
+  (%XP/écran) et **score %XP** par map. Chaque map récoltée est une **étape explicite**
+  de la liste : les maps intermédiaires traversées sur le trajet BFS qui portent des
+  ressources éligibles deviennent des stops à part entière (les arrows de
+  déplacement sont accumulés depuis l'étape précédente).
 - **Interactif** — un **planificateur live à horizon glissant** : il affiche les
   **10/20/30 prochaines cases** (sélectionnable) calculées par **beam search**
   (lookahead, pas glouton-myope) et **replanifie à chaque clic**. **Suivant** valide

@@ -88,9 +88,10 @@ class LivePlannerTest(unittest.TestCase):
     def test_window_has_lookahead_and_distinct_maps(self):
         f = self._finder()
         w = f.plan_window(None, self._xp(f), [], horizon=3, lambda_travel=0.0)
-        self.assertEqual(len(w), 3)
+        # the window looks ahead several explicit (now flattened) stops, all distinct
+        self.assertGreaterEqual(len(w), 3)
         coords = [tuple(s["world_coords"]) for s in w]
-        self.assertEqual(len(set(coords)), 3)
+        self.assertEqual(len(set(coords)), len(coords))
 
     def test_window_respects_visited(self):
         f = self._finder()
@@ -106,25 +107,39 @@ class LivePlannerTest(unittest.TestCase):
         self.assertGreater(nx["lumberjack"], jx["lumberjack"])
 
 
-class TransitTest(unittest.TestCase):
-    def test_intermediate_maps_are_harvested_for_free(self):
+class ExplicitStopsTest(unittest.TestCase):
+    def test_intermediate_map_is_its_own_explicit_stop(self):
         a = Resource("a", "A", "miner", 20, 1, 1, 1)
         # two rich endpoints, a small resource map between them on the straight path
         cells = [cell("s", (0, 0), ("a", 10)), cell("e", (5, 0), ("a", 10)),
                  cell("m", (2, 0), ("a", 3))]
         r = finder([a], cells).find({"miner": 1}, lambda_travel=0.0)
-        transit = {tuple(t["world_coords"]) for s in r.stops for t in s.transit}
-        self.assertIn((2, 0), transit)           # grabbed en route, not skipped
+        coords = [tuple(s.world_coords) for s in r.stops]
+        self.assertIn((2, 0), coords)            # an explicit step, not a hidden pick-up
+        # and the map crossed on the way is harvested (its own stop carries items)
+        mid = next(s for s in r.stops if tuple(s.world_coords) == (2, 0))
+        self.assertTrue(mid.harvests)
 
-    def test_advance_harvests_transit_and_marks_visited(self):
+    def test_window_inlines_crossed_maps_as_steps(self):
+        a = Resource("a", "A", "miner", 20, 1, 1, 1)
+        cells = [cell("s", (0, 0), ("a", 10)), cell("e", (5, 0), ("a", 10)),
+                 cell("m", (2, 0), ("a", 3))]
+        f = finder([a], cells)
+        jx = {j: f.xp_table.xp_for_level(1) for j in GATHERING_JOBS}
+        w = f.plan_window((0, 0), jx, [[0, 0]], horizon=4, lambda_travel=0.0)
+        coords = [tuple(s["world_coords"]) for s in w]
+        self.assertIn((2, 0), coords)            # crossed map shows as a window step
+
+    def test_advance_harvests_one_map_and_marks_visited(self):
         a = Resource("a", "A", "miner", 20, 1, 1, 1)
         cells = [cell("s", (0, 0), ("a", 5)), cell("e", (4, 0), ("a", 5)),
                  cell("m", (2, 0), ("a", 5))]
         f = finder([a], cells)
         jx = {j: f.xp_table.xp_for_level(1) for j in GATHERING_JOBS}
-        njx, visited = f.advance(jx, [[0, 0]], [0, 0], [4, 0])
+        njx, visited = f.advance(jx, [[0, 0]], [2, 0])   # commit the next stop only
         self.assertGreater(njx["miner"], jx["miner"])
-        self.assertIn([2, 0], visited)           # the transit map is now visited
+        self.assertIn([2, 0], visited)
+        self.assertNotIn([4, 0], visited)        # a single advance harvests one map
 
 
 if __name__ == "__main__":

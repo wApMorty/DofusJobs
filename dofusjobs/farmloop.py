@@ -32,12 +32,9 @@ _MAX_STOPS = 600     # safety cap on total route length
 @dataclass
 class LoopStop:
     world_coords: Coord
-    directions: List[str]
+    directions: List[str]           # arrows walked since the previous stop
     harvests: List[dict]            # {resource_id, resource_name, job_id, quantity, xp}
     value: float                    # %-levels (or xp) gained here per lap
-    # Free pick-ups on the intermediate maps walked through on the way to this
-    # stop (you cross them anyway): [{world_coords, harvests}].
-    transit: List[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -64,8 +61,7 @@ class FarmLoopResult:
             "terminated": self.terminated,
             "stops": [
                 {"world_coords": list(s.world_coords), "directions": s.directions,
-                 "value": round(s.value, 4), "harvests": s.harvests,
-                 "transit": s.transit}
+                 "value": round(s.value, 4), "harvests": s.harvests}
                 for s in self.stops
             ],
         }
@@ -176,23 +172,15 @@ class FarmLoopFinder:
                 terminated = "no_positive_gain" if pos is not None else "no_eligible_spot"
                 break
             _, c, travel, items, v = best
-            # Walk the path: grab any eligible resources on the intermediate maps
-            # for free (we cross them anyway), then harvest the chosen map.
-            if pos is not None:
-                dirs, transit = self._walk_leg(pos, c.world_coords, visited, job_xp, cur_levels)
-            else:
-                dirs, transit = [], []
+            # Walk to the chosen map; every harvestable map crossed on the way
+            # becomes its own explicit stop (it's part of the route, not a silent
+            # "au passage" pick-up), then the chosen map itself.
+            for st in self._leg_stops(pos, c.world_coords, visited, job_xp, cur_levels, metric):
+                stops.append(LoopStop(world_coords=tuple(st["coord"]),
+                                      directions=st["directions"],
+                                      harvests=st["harvests"], value=st["value"]))
             screens += travel
-            visited.add(c.world_coords)
             pos = c.world_coords
-            for it in items:                  # harvest the whole map; simulate level-ups
-                job = it["job_id"]
-                job_xp[job] += it["xp"] * it["quantity"]
-                lvl = self.xp_table.level_for_xp(job_xp[job])
-                if lvl > cur_levels[job]:
-                    cur_levels[job] = lvl
-            stops.append(LoopStop(world_coords=pos, directions=dirs,
-                                  harvests=items, value=v, transit=transit))
         else:
             terminated = "max_stops"
 
@@ -211,43 +199,47 @@ class FarmLoopFinder:
             start_levels={j: self.xp_table.level_for_xp(start_xp[j]) for j in GATHERING_JOBS},
             end_levels=dict(cur_levels))
 
-    def _eligible_items(self, cell: Cell, levels) -> List[dict]:
-        """The harvestable items on ``cell`` at these job levels."""
-        out = []
-        for cr in cell.resources:
-            r = self.resources[cr.resource_id]
-            if levels.get(r.job_id, 0) >= r.required_level:
-                out.append({"resource_id": r.resource_id, "resource_name": r.name,
-                            "job_id": r.job_id, "quantity": cr.quantity, "xp": r.base_xp})
-        return out
+    def _leg_stops(self, prev, dest, visited, job_xp, cur_levels, metric):
+        """Walk the real BFS path ``prev`` -> ``dest`` and turn it into an ordered
+        list of **explicit** stops: one per harvestable map crossed on the way
+        (these used to be silent "au passage" pick-ups) plus ``dest`` itself.
 
-    def _walk_leg(self, prev, dest, visited, job_xp, cur_levels):
-        """Walk the real BFS path ``prev`` -> ``dest``; harvest eligible resources
-        on the **intermediate** maps for free (you cross them anyway). Returns
-        ``(directions, transit)`` and mutates ``visited``/``job_xp``/``cur_levels``.
-        ``transit`` = ``[{world_coords, harvests}]`` for the maps grabbed en route."""
-        path = self.graph.shortest_path(prev, dest)
-        if not path:
-            return self.graph.directions(prev, dest), []     # disconnected: zaap/boat
-        transit = []
-        for mid in path[1:-1]:
-            if mid in visited:
+        Each stop is ``{coord, directions, harvests, value, travel}`` where
+        ``directions``/``travel`` cover the screens walked since the previous
+        emitted stop (bare pass-through maps are folded into the next stop's
+        arrows). Harvests every emitted map: mutates ``visited``/``job_xp``/
+        ``cur_levels`` and simulates the level-ups."""
+        dest = tuple(dest)
+        if prev is None:                       # free start: just the destination
+            path = [dest]
+            start = 0
+        else:
+            path = self.graph.shortest_path(tuple(prev), dest) or [tuple(prev), dest]
+            start = 1                          # path[0] is where we already are
+        stops = []
+        anchor = 0                             # index of the last emitted map in path
+        for i in range(start, len(path)):
+            co = path[i]
+            is_dest = i == len(path) - 1
+            if co in visited and not is_dest:
                 continue
-            cell = self.cells_by_coord.get(mid)
+            cell = self.cells_by_coord.get(co)
             if cell is None:
-                continue
-            items = self._eligible_items(cell, cur_levels)
-            if not items:
-                continue
-            visited.add(mid)
-            for it in items:
+                continue                       # bare map: keep walking, fold its arrow on
+            v, _per, items = self._cell_value(cell, cur_levels, job_xp, metric, {})
+            if not items and not is_dest:
+                continue                       # nothing eligible here at these levels
+            stops.append({"coord": list(co), "directions": path_directions(path[anchor:i + 1]),
+                          "harvests": items, "value": v, "travel": i - anchor})
+            anchor = i
+            for it in items:                   # harvest the emitted map; simulate level-ups
                 job = it["job_id"]
                 job_xp[job] += it["xp"] * it["quantity"]
                 lvl = self.xp_table.level_for_xp(job_xp[job])
                 if lvl > cur_levels[job]:
                     cur_levels[job] = lvl
-            transit.append({"world_coords": list(mid), "harvests": items})
-        return path_directions(path), transit
+            visited.add(co)
+        return stops
 
     # -------------------------------------------------- interactive rolling plan
     def harvest_coord(self, job_xp: Dict[str, int], coord):
@@ -263,17 +255,14 @@ class FarmLoopFinder:
                     nx[r.job_id] += r.base_xp * cr.quantity
         return nx
 
-    def advance(self, job_xp: Dict[str, int], visited, prev_pos, dest):
-        """Commit walking ``prev_pos`` -> ``dest`` in the live planner: harvest the
-        free transit maps on the way AND ``dest`` (whole map). Returns the new
-        ``(job_xp, visited)`` (visited now includes the transit maps + dest)."""
-        job_xp = dict(job_xp)
-        vis = {tuple(c) for c in visited}
+    def advance(self, job_xp: Dict[str, int], visited, dest):
+        """Commit the next explicit stop in the live planner: harvest the whole
+        map at ``dest`` and mark it visited. Each harvestable map is now its own
+        stop, so a single advance only ever harvests that one map. Returns the new
+        ``(job_xp, visited)``."""
         dest = tuple(dest)
-        if prev_pos is not None:
-            levels = {j: self.xp_table.level_for_xp(job_xp[j]) for j in GATHERING_JOBS}
-            self._walk_leg(tuple(prev_pos), dest, vis, job_xp, levels)
         job_xp = self.harvest_coord(job_xp, dest)
+        vis = {tuple(c) for c in visited}
         vis.add(dest)
         return job_xp, [list(c) for c in sorted(vis)]
 
@@ -351,26 +340,22 @@ class FarmLoopFinder:
         if not beam or not beam[0][0]:
             return []
         best = max(beam, key=lambda n: n[4] - lam * n[5])
-        # Materialise the window, computing the free transit pick-ups per leg on
-        # local copies of the state (preview — don't mutate the caller's).
+        # Materialise the window: each beam leg is flattened into explicit per-map
+        # stops (harvestable maps crossed on the way are full steps, not silent
+        # pick-ups). Done on local copies of the state (preview — don't mutate the
+        # caller's).
         window = []
         prev = pos
         vis = set(base_visited)
         jx = dict(job_xp)
         levels = {j: self.xp_table.level_for_xp(jx[j]) for j in GATHERING_JOBS}
-        for co, items, v, travel in best[0]:
-            if prev is not None:
-                dirs, transit = self._walk_leg(prev, co, vis, jx, levels)
-            else:
-                dirs, transit = [], []
-            vis.add(co)
-            for it in items:                  # harvest the stop into the local copy
-                jx[it["job_id"]] += it["xp"] * it["quantity"]
-                lvl = self.xp_table.level_for_xp(jx[it["job_id"]])
-                if lvl > levels[it["job_id"]]:
-                    levels[it["job_id"]] = lvl
-            window.append({"world_coords": list(co), "directions": dirs,
-                           "harvests": items, "value": round(v, 4), "travel": travel,
-                           "transit": transit})
+        for co, _items, _v, _travel in best[0]:
+            for st in self._leg_stops(prev, co, vis, jx, levels, metric):
+                window.append({"world_coords": st["coord"], "directions": st["directions"],
+                               "harvests": st["harvests"], "value": round(st["value"], 4),
+                               "travel": st["travel"]})
             prev = co
-        return window
+        # Each harvestable map is its own explicit step now, so the horizon counts
+        # those steps: the beam looks ahead ``horizon`` rich stops (often more maps
+        # once flattened) but we only surface the next ``horizon`` of them.
+        return window[:max(1, int(horizon))]
