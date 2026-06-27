@@ -79,7 +79,10 @@ python3 -m unittest discover -s tests   # 41 tests
 
 ## Données
 
-Rebuild (depuis l'API DofusDB, idempotent) :
+Les `data/*.json` sont **déjà inclus** dans le repo — rien à faire pour démarrer.
+Pour **(re)générer/rafraîchir** les données depuis l'API DofusDB (après une mise à
+jour Dofus, ou un clone sans les data) : sous **Windows**, double-clique
+**`install.bat`** ; sinon, en ligne de commande (idempotent) :
 
 ```bash
 python3 scripts/build_dofusdb_dataset.py   # catalogue + cells (worldMap=1)
