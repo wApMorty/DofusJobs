@@ -1,11 +1,11 @@
 """Zero-dependency web app for DofusJobs (stdlib http.server only).
 
 Routes:
-  GET  /                 -> input form (XP/level per job, pods limit, lambda)
-  POST /api/route        -> JSON {job_levels, pods_limit, lambda_travel, use_online}
+  GET  /                 -> input form (level per job, lambda, metric)
+  POST /api/route        -> JSON {job_levels, lambda_travel, metric} -> farm route
   GET  /healthz          -> "ok"
 
-Run:  python -m webapp.app  [--port 8000] [--online]
+Run:  python -m webapp.app  [--port 8000]
 """
 
 from __future__ import annotations
@@ -22,9 +22,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dofusjobs import (  # noqa: E402
     GATHERING_JOBS,
     JOB_LABELS_FR,
+    FarmLoopFinder,
     JobXpTable,
-    Optimizer,
-    PlayerInput,
     load_dataset,
 )
 
@@ -56,25 +55,14 @@ _XP_TABLE = JobXpTable.load()
 
 
 def compute(payload: dict) -> dict:
-    tbl = _XP_TABLE
-    # Accept either explicit job_xp or job_levels (mapped to start-of-level XP).
-    if payload.get("job_xp"):
-        job_xp = {j: int(payload["job_xp"].get(j, 0)) for j in GATHERING_JOBS}
-    else:
-        levels = payload.get("job_levels", {})
-        job_xp = {j: tbl.xp_for_level(int(levels.get(j, 1))) for j in GATHERING_JOBS}
-    pods_limit = int(payload.get("pods_limit", 0))
+    levels = payload.get("job_levels", {})
+    job_levels = {j: int(levels.get(j, 1)) for j in GATHERING_JOBS}
     lam = float(payload.get("lambda_travel", 1.0))
     metric = "xp" if payload.get("metric") == "xp" else "levels"
-    start = payload.get("start_coords")
-    start_coords = tuple(int(v) for v in start) if start else None
 
     resources, cells, maps = get_data()
-    player = PlayerInput(job_xp=job_xp, pods_limit=pods_limit,
-                         lambda_travel=lam, start_coords=start_coords, metric=metric)
-    opt = Optimizer(resources, cells, maps=maps, xp_table=tbl)
-    result = opt.optimize(player)
-    out = result.to_dict()
+    finder = FarmLoopFinder(resources, cells, maps=maps, xp_table=_XP_TABLE)
+    out = finder.find(job_levels, metric=metric, lambda_travel=lam).to_dict()
     out["job_labels"] = JOB_LABELS_FR
     return out
 

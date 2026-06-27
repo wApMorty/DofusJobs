@@ -68,34 +68,30 @@
 <body>
 <header>
   <h1><span>DofusJobs</span> — optimiseur de leveling récolte</h1>
-  <div class="sub">Saisis tes niveaux par métier et ta limite de pods. L'optimiseur calcule une passe maximisant l'XP sous contrainte de pods, en pénalisant les déplacements. <b>Départ libre</b> (le moteur choisit le meilleur point), et <b>simulation des paliers</b> : si tu débloques un palier en cours de run, le chemin s'adapte.</div>
+  <div class="sub">Saisis tes niveaux par métier. Chaque map est <b>notée par la somme de %XP</b> qu'elle te rapporte, et la route suit le meilleur <b>score par écran</b> — sans contrainte de pods, en récoltant chaque map entièrement et en simulant les paliers. Les bas métiers pèsent plus (un niveau est moins cher) → ils sont priorisés, jusqu'à monter tout vers 200.</div>
 </header>
 <main>
   <form id="form" class="card">
     <h3 style="margin-top:0">Tes niveaux de métier</h3>
     {{JOB_ROWS}}
     <div class="field">
-      <label>Limite de pods</label>
-      <input type="number" min="1" name="pods_limit" value="1000">
-    </div>
-    <div class="field">
       <label>Objectif</label>
       <select name="metric" id="metric">
         <option value="levels">Par niveau — % de level (équilibre les métiers)</option>
-        <option value="xp">Par XP brut (maximise l'XP totale)</option>
+        <option value="xp">Par XP brut (favorise les ressources abondantes)</option>
       </select>
-      <div class="hint">« Par niveau » privilégie les métiers qui montent vite : un haut niveau rapporte peu de % de level. Idéal pour monter tout en parallèle.</div>
+      <div class="hint">« Par niveau » privilégie les métiers bas (un haut niveau rapporte peu de % de level) → monte tout en parallèle.</div>
     </div>
     <div class="field">
-      <label>λ — poids du déplacement (par écran de map)</label>
-      <input type="number" min="0" step="0.5" name="lambda_travel" value="2">
-      <div class="hint">0 = ignore le trajet. Unité = celle de l'objectif (XP/écran ou %-level/écran).</div>
+      <label>λ — poids du déplacement (%XP par écran)</label>
+      <input type="number" min="0" step="0.5" name="lambda_travel" value="1">
+      <div class="hint">0 = ignore le trajet (route très longue). Plus haut = route plus courte et dense.</div>
     </div>
-    <button type="submit" id="go">Calculer le chemin optimisé</button>
+    <button type="submit" id="go">Calculer la route</button>
   </form>
 
   <section id="result" class="card">
-    <div class="empty">Le chemin optimisé s'affichera ici.</div>
+    <div class="empty">La route de leveling s'affichera ici.</div>
   </section>
 </main>
 
@@ -140,7 +136,6 @@ form.addEventListener('submit', async (e) => {
   JOBS.forEach(j => job_levels[j] = Number(form.querySelector(`[name=lvl_${j}]`).value || 0));
   const payload = {
     job_levels,
-    pods_limit: Number(form.pods_limit.value || 0),
     lambda_travel: Number(form.lambda_travel.value || 0),
     metric: document.getElementById('metric').value,
   };
@@ -152,7 +147,7 @@ form.addEventListener('submit', async (e) => {
   } catch (err) {
     resultEl.innerHTML = `<div class="reason">Erreur : ${err.message}</div>`;
   } finally {
-    btn.disabled = false; btn.textContent = 'Calculer le chemin optimisé';
+    btn.disabled = false; btn.textContent = 'Calculer la route';
   }
 });
 
@@ -160,38 +155,30 @@ function render(d) {
   const labels = d.job_labels || {};
   const metrics = `
     <div class="metrics">
-      <div class="metric"><div class="k">Niveaux gagnés</div><div class="v">+${(d.total_levels_gained||0).toFixed(2)}</div></div>
-      <div class="metric"><div class="k">XP totale</div><div class="v">${d.total_xp}</div></div>
-      <div class="metric"><div class="k">Déplacement</div><div class="v">${d.total_travel_cost}</div></div>
-      <div class="metric"><div class="k">Pods</div><div class="v">${d.pods_used}/${d.pods_limit}</div></div>
-      <div class="metric"><div class="k">Objectif</div><div class="v" style="font-size:15px">${d.metric==='levels'?'niveau %':'XP brut'}</div></div>
+      <div class="metric"><div class="k">${d.metric==='levels'?'Niveaux gagnés':'XP gagnée'}</div><div class="v">${d.metric==='levels'?'+'+((d.total_value||0)/100).toFixed(1):Math.round(d.total_value||0)}</div></div>
+      <div class="metric"><div class="k">Écrans</div><div class="v">${d.screens}</div></div>
+      <div class="metric"><div class="k">Vitesse</div><div class="v" style="font-size:15px">${(d.rate||0).toFixed(2)} ${d.metric==='levels'?'%niv':'xp'}/écran</div></div>
+      <div class="metric"><div class="k">Stops</div><div class="v">${(d.stops||[]).length}</div></div>
     </div>`;
-  const byJob = Object.entries(d.xp_by_job || {}).map(([j,v]) => {
+  const byJob = Object.entries(d.per_job || {}).sort((a,b)=>b[1]-a[1]).map(([j,v]) => {
     const sl = (d.start_levels||{})[j], el = (d.end_levels||{})[j];
-    const lg = (d.levels_gained||{})[j];
-    const lvl = (lg!==undefined) ? ` <small>(${sl}→${el}, +${lg.toFixed(2)} lvl)</small>` : '';
-    return `<span class="badge">${labels[j]||j}: ${v} XP${lvl}</span>`;
+    const g = d.metric==='levels' ? `+${(v/100).toFixed(2)} lvl` : `+${Math.round(v)} xp`;
+    return `<span class="badge">${labels[j]||j}: ${sl}→${el} <small>(${g})</small></span>`;
   }).join(' ') || '<span class="empty">—</span>';
 
-  const lupByStop = {};
-  (d.level_ups||[]).forEach(lu => { (lupByStop[lu.at_stop_index] ||= []).push(lu); });
   lastData = d; stepIdx = 0;
 
   let rows = '';
-  d.route.forEach((s, i) => {
+  d.stops.forEach((s, i) => {
     const move = i===0
       ? '<span class="empty">départ</span>'
-      : `${dirsHtml(s) || '<span class="empty">sur place</span>'} <small>(${s.travel_cost_from_prev} écran${s.travel_cost_from_prev>1?'s':''})</small>`;
+      : (dirsHtml(s) || '<span class="empty">sur place</span>');
     rows += `<tr>
       <td>${i}</td>
       <td>${coordChip(s)}</td>
       <td>${move}</td>
-      <td>${s.stop_xp}</td>
+      <td>${(s.value||0).toFixed(1)}</td>
       <td>${harvestBadges(s)}</td></tr>`;
-    (lupByStop[i]||[]).forEach(lu => {
-      const unl = lu.unlocked && lu.unlocked.length ? ` → débloque <b>${lu.unlocked.join(', ')}</b>` : '';
-      rows += `<tr><td></td><td colspan="4" class="lvlup">⬆ ${labels[lu.job_id]||lu.job_id} ${lu.from_level}→${lu.to_level}${unl}</td></tr>`;
-    });
   });
   resultEl.innerHTML = `
     ${metrics}
@@ -203,10 +190,10 @@ function render(d) {
     <div id="panel-list" class="panel active">
       <div class="hint" style="margin-bottom:6px">💡 Clique sur une coordonnée pour copier la commande <code>/travel x y</code> (autopilote en jeu).</div>
       <table>
-        <thead><tr><th>#</th><th>Coords</th><th>Déplacement</th><th>XP</th><th>Récoltes</th></tr></thead>
+        <thead><tr><th>#</th><th>Coords</th><th>Déplacement</th><th>Score %XP</th><th>Récoltes</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      <div class="reason">Fin de passe : <code>${d.terminated_reason}</code></div>
+      <div class="reason">Fin : <code>${d.terminated}</code></div>
     </div>
     <div id="panel-step" class="panel"></div>`;
   resultEl.querySelectorAll('.tab').forEach(t =>
@@ -221,9 +208,7 @@ function switchTab(name) {
 }
 
 function harvestBadges(s) {
-  const harv = {};
-  s.harvests.forEach(h => { harv[h.resource_name] = (harv[h.resource_name]||0)+1; });
-  return Object.entries(harv).map(([n,c]) => `<span class="badge">${n} ×${c}</span>`).join(' ')
+  return (s.harvests||[]).map(h => `<span class="badge">${h.resource_name} ×${h.quantity}</span>`).join(' ')
          || '<span class="empty">—</span>';
 }
 function dirsHtml(s) {
@@ -235,23 +220,15 @@ function coordChip(s, cls) {
 }
 
 function renderStep(i) {
-  const d = lastData; if (!d) return;
-  const N = d.route.length;
+  const d = lastData; if (!d || !d.stops.length) return;
+  const N = d.stops.length;
   stepIdx = Math.max(0, Math.min(i, N-1));
-  const s = d.route[stepIdx];
-  const labels = d.job_labels || {};
-  const lup = (d.level_ups||[]).filter(lu => lu.at_stop_index===stepIdx);
+  const s = d.stops[stepIdx];
   const pct = N>1 ? Math.round(stepIdx/(N-1)*100) : 100;
 
   const move = stepIdx===0
     ? `<div class="big-dirs"><span class="empty">Point de départ</span></div>`
-    : `<div class="big-dirs">${dirsHtml(s) || '<span class="empty">sur place</span>'}</div>
-       <div class="muted" style="margin-top:6px">${s.travel_cost_from_prev} écran${s.travel_cost_from_prev>1?'s':''} depuis l'étape précédente</div>`;
-
-  const lupHtml = lup.map(lu => {
-    const unl = lu.unlocked && lu.unlocked.length ? ` → débloque <b>${lu.unlocked.join(', ')}</b>` : '';
-    return `<div class="lvlup">⬆ ${labels[lu.job_id]||lu.job_id} ${lu.from_level}→${lu.to_level}${unl}</div>`;
-  }).join('');
+    : `<div class="big-dirs">${dirsHtml(s) || '<span class="empty">sur place</span>'}</div>`;
 
   resultEl.querySelector('#panel-step').innerHTML = `
     <div class="step-progress"><div class="step-bar" style="width:${pct}%"></div></div>
@@ -259,8 +236,7 @@ function renderStep(i) {
     <div class="step-card">
       <div><div class="step-lab">Déplacement</div>${move}</div>
       <div><div class="step-lab">Destination — clique pour copier <code>/travel</code></div>${coordChip(s, 'big')}</div>
-      <div><div class="step-lab">À récolter ici · ${s.stop_xp} XP</div><div class="step-harv">${harvestBadges(s)}</div></div>
-      ${lupHtml ? `<div>${lupHtml}</div>` : ''}
+      <div><div class="step-lab">À récolter ici · score ${(s.value||0).toFixed(1)} %XP</div><div class="step-harv">${harvestBadges(s)}</div></div>
     </div>
     <div class="step-nav">
       <button class="navbtn" ${stepIdx===0?'disabled':''} data-step="prev">◀ Précédent</button>

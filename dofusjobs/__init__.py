@@ -24,12 +24,15 @@ from .models import (
     Resource,
     RouteResult,
 )
+from .farmloop import FarmLoopFinder, FarmLoopResult
 from .optimizer import Optimizer
 
 __all__ = [
     "load_dataset",
     "MapGraph",
     "Optimizer",
+    "FarmLoopFinder",
+    "FarmLoopResult",
     "JobXpTable",
     "PlayerInput",
     "Resource",
@@ -39,6 +42,7 @@ __all__ = [
     "GATHERING_JOBS",
     "JOB_LABELS_FR",
     "plan_route",
+    "plan_farm_route",
 ]
 
 __version__ = "0.2.0"
@@ -75,3 +79,23 @@ def plan_route(job_xp: Optional[Dict[str, int]] = None,
                          lambda_travel=float(lambda_travel), start_coords=start_coords,
                          metric=metric)
     return Optimizer(resources, cells, maps=maps, xp_table=xp_table).optimize(player)
+
+
+def plan_farm_route(job_levels: Optional[Dict[str, int]] = None,
+                    *,
+                    metric: str = "levels",
+                    lambda_travel: float = 1.0,
+                    resources: Optional[Dict[str, Resource]] = None,
+                    cells: Optional[List[Cell]] = None,
+                    maps: Optional[List[Tuple[int, int]]] = None,
+                    xp_table: Optional[JobXpTable] = None) -> FarmLoopResult:
+    """Greedy leveling route (v4, no pods): score every map by the total %XP it
+    yields at the current levels and walk the best score-per-screen path,
+    harvesting whole maps and simulating level-ups, to level all jobs fastest.
+    ``lambda_travel`` = %XP traded per screen (higher = shorter, denser route)."""
+    if resources is None or cells is None or maps is None:
+        resources, cells, maps = load_dataset()
+    xp_table = xp_table or JobXpTable.load()
+    levels = {j: int((job_levels or {}).get(j, 1)) for j in GATHERING_JOBS}
+    finder = FarmLoopFinder(resources, cells, maps=maps, xp_table=xp_table)
+    return finder.find(levels, metric=metric, lambda_travel=float(lambda_travel))

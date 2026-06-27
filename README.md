@@ -1,14 +1,24 @@
 # DofusJobs — optimiseur de leveling des métiers de récolte (Dofus Unity)
 
-Calcule un **chemin de farm optimisé pour une passe** : tu saisis ton niveau (ou
-ton XP) dans les 5 métiers de récolte et ta **limite de pods**, l'outil renvoie
-l'ordre des cellules à visiter qui **maximise l'XP** sous contrainte de pods, **en
-pénalisant les déplacements**.
+Calcule la **route de leveling la plus rapide** : tu saisis ton niveau dans les 5
+métiers de récolte, l'outil **note chaque map par la somme de %XP** qu'elle te
+rapporte (toutes les ressources éligibles, à tes niveaux courants) et suit le
+meilleur **score par écran** — **sans contrainte de pods**, en récoltant chaque
+map entièrement et en simulant les paliers, pour monter tous tes métiers vers 200.
 
 > Conçu via un workflow spec-first (Ouroboros) : l'interview a figé le modèle,
 > puis l'app a été implémentée et testée à partir de cette spec.
 
-## Ce que fait le modèle (v2)
+## Ce que fait le modèle (v4 — sans pods)
+
+> **v4** : on note **chaque map par la somme de %XP** qu'elle fournit et on suit
+> la route la plus rapide (meilleur score/écran), **sans pods**. Pourquoi : pour
+> *lever* un métier la contrainte réelle n'est pas l'inventaire (on vide à la
+> banque) mais le **temps = déplacement**. L'ancien `/pods` divisait la valeur par
+> le poids et écrasait le bois/minerai (XP faible, lourds) ; en l'enlevant, les
+> bas métiers redeviennent prioritaires (gros %/récolte). À mesure qu'un métier
+> monte, son %XP baisse → la route bascule et **équilibre tout vers 200**.
+
 
 - **Données réelles (DofusDB + dofus-map)** : 85 ressources avec **niveau et pods
   authentiques** (DofusDB), placées au **niveau de la map** via les **vrais counts
@@ -25,39 +35,35 @@ pénalisant les déplacements**.
 - **Graphe de la vraie carte du monde** : nœuds = ~6200 vraies maps (worldMap=1),
   arêtes = maps cardinalement adjacentes existantes → le trajet suit le **vrai
   layout des continents** (pas de marche à travers la mer). Chaque cellule (map)
-  porte ses ressources ; l'XP/pods disponibles **dépendent de ton niveau courant**.
+  porte ses ressources ; le **score %XP** de chaque map dépend de ton niveau courant.
 - **Simulation des paliers dans le plan** : en récoltant, ton XP de métier monte ;
   quand tu franchis un palier, les **ressources de tier supérieur se débloquent en
-  cours de route** et le chemin s'adapte. Les level-ups sont reportés dans la sortie
-  (`level_ups`, avec ce qui est débloqué et à quel stop).
+  cours de route** et le %XP du métier monté **baisse**, donc le chemin s'adapte et
+  rééquilibre vers les métiers en retard. La sortie donne `start_levels`/`end_levels`.
 - **Deux objectifs** (`metric`) :
   - **`levels` (défaut)** — maximise la somme des **% de niveau** gagnés. Comme un
     niveau coûte d'autant plus d'XP qu'on est haut, un métier avancé « rapporte »
     peu : l'optimiseur **équilibre la montée de tous les métiers en parallèle** et
     évite de gaspiller dans un job déjà haut.
   - **`xp`** — maximise l'XP brute totale (favorise les ressources/jobs avancés).
-- **Pondération déplacement** : `score = objectif − λ·total_travel_cost`. `λ` est en
-  **XP par écran** (`λ=0` ignore le trajet). Pour l'objectif `levels`, cette XP est
-  **convertie en %-de-niveau au niveau courant** du métier, pour que la pénalité
-  rétrécisse avec le niveau **comme** le gain (sinon, à haut niveau, un λ brut
-  écrasait des gains de ~1% et la route calait avec des pods en réserve). La
-  décision « récolter ou pas » se ramène ainsi à `xp_récolte > λ·trajet`,
-  **invariante au niveau**.
+- **Pondération déplacement** : on choisit la map maximisant `score_map − λ·trajet`.
+  `λ` est en **%XP par écran** (`λ=0` ignore le trajet, route très longue ; plus
+  haut = route plus courte et dense).
 - **XP de récolte fidèle au jeu** : XP **fixe par ressource** (pas de malus de
   sur-niveau en récolte) ; le niveau ne fait que **gater** l'éligibilité.
-- **Pods = contrainte dure** : `0 ≤ pods_used ≤ pods_limit`, pas de retour banque.
+- **Sans pods** : aucune limite d'inventaire ; chaque map visitée est **récoltée
+  entièrement**. La contrainte est le déplacement, pas le poids.
 - **Déplacement case-par-case** : distance = **BFS** sur le graphe des vraies maps
   (1 unité = 1 transition d'écran), respectant le layout réel.
 
 ### Algorithme
 
-Comme les niveaux montent en cours de passe, ce qui est récoltable dépend de
-l'ordre → optimisation **séquentielle** : à chaque étape, **un BFS borné** depuis
-la position courante donne la distance à toutes les maps proches, on prend la
-récolte éligible **la plus efficace en XP/pod** (trajet intégré à la valeur), on
-récolte, puis on **recalcule le niveau** ; franchir un palier ouvre de nouveaux
-candidats. Départ libre = premier lot sans trajet. La passe reste **locale** (rayon
-borné) — réaliste et rapide. Déterministe (efficacité, valeur, trajet, identifiants).
+Glouton séquentiel, sans pods : on part dans la **composante connexe la plus
+riche** (départ libre), puis à chaque étape un **BFS borné** donne la distance aux
+maps proches ; on va sur la map maximisant `Σ%XP − λ·trajet` (non encore visitée),
+on la **récolte entièrement**, on **recalcule les niveaux** (un palier fait baisser
+le %XP de ce métier → la route se rééquilibre), et on continue jusqu'à ce qu'aucune
+map proche ne vaille le trajet. Déterministe (score, trajet, identifiants).
 
 ## Installation
 
@@ -65,7 +71,7 @@ borné) — réaliste et rapide. Déterministe (efficacité, valeur, trajet, ide
 
 ```bash
 cd DofusJobs
-python3 -m unittest discover -s tests   # 38 tests
+python3 -m unittest discover -s tests   # 43 tests
 ```
 
 ## Données
@@ -126,56 +132,53 @@ sous-zone seule.) Artefacts :
 python3 -m webapp.app --port 8000          # http://127.0.0.1:8000
 ```
 
-Affiche le chemin ordonné (maps), des **instructions de déplacement lisibles**
-(`→×2 ↑` au lieu de coords brutes — le vrai chemin BFS entre deux stops,
-ordre préservé), l'XP totale et par métier, les pods, le coût de déplacement, **les
-level-ups en cours de passe** (et ce qu'ils débloquent). **Clic sur une coordonnée**
-= copie la commande `/travel x y` dans le presse-papier (autopilote en jeu). Deux
-vues : onglet **Liste** (toutes les instructions d'un coup) et onglet **Interactif**
-(étape par étape, en grand, avec navigation Précédent/Suivant et barre de progression).
+Affiche la route ordonnée (maps), des **instructions de déplacement lisibles**
+(`→×2 ↑` au lieu de coords brutes — le vrai chemin BFS entre deux stops, ordre
+préservé), les **niveaux gagnés par métier**, les écrans parcourus, la **vitesse**
+(%XP/écran) et le **score %XP** de chaque map. **Clic sur une coordonnée** = copie
+la commande `/travel x y` (autopilote en jeu). Deux vues : onglet **Liste** (tout
+d'un coup) et onglet **Interactif** (étape par étape, navigation Précédent/Suivant).
 
 ### Ligne de commande
 
 ```bash
-python3 -m dofusjobs --pods 600 --lambda 1 --all 1                 # bas niveau: voir les unlocks
-python3 -m dofusjobs --pods 500 --lumberjack 60 --miner 1          # metric=levels (défaut): équilibre
-python3 -m dofusjobs --pods 500 --lumberjack 60 --miner 1 --metric xp   # XP brut: gave le job avancé
-python3 -m dofusjobs --pods 300 --all 50 --start 10,-20 --json     # départ imposé + JSON
+python3 -m dofusjobs --lumberjack 9 --miner 10 --herbalist 62 --farmer 88 --fisherman 25
+python3 -m dofusjobs --all 1 --lambda 0.5            # route plus longue et dense
+python3 -m dofusjobs --all 50 --metric xp --json     # score = XP brut, sortie JSON
 ```
 
 ### API Python
 
 ```python
-from dofusjobs import plan_route
-r = plan_route(job_levels={"lumberjack": 60, "miner": 1}, pods_limit=500,
-               lambda_travel=1.0, metric="levels")   # ou metric="xp"
-# ou en XP exact : plan_route(job_xp={"lumberjack": 100421}, pods_limit=500)
-print(r.total_levels_gained, r.levels_gained,
-      [s.cell_id for s in r.route],
-      [(lu.job_id, lu.to_level, lu.unlocked) for lu in r.level_ups])
+from dofusjobs import plan_farm_route
+r = plan_farm_route(job_levels={"lumberjack": 9, "farmer": 88}, lambda_travel=1.0)
+print(r.total_value, r.screens, r.rate, r.terminated)
+print({j: (r.start_levels[j], r.end_levels[j]) for j in r.per_job})
+print([s.world_coords for s in r.stops], r.stops[0].directions)
 ```
 
 ### API HTTP
 
-`POST /api/route` — `job_levels` **ou** `job_xp`, `pods_limit`, `lambda_travel`,
-`metric`, `start_coords` (optionnel `[x,y]`). Réponse : route (chaque stop porte
-`directions`, ex. `["→×2","↑"]`), métriques, `level_ups`,
+`POST /api/route` — `job_levels`, `lambda_travel`, `metric` (`levels`/`xp`).
+Réponse : `stops` (chacun : `world_coords`, `directions` ex. `["→×2","↑"]`,
+`value`, `harvests`), `screens`, `rate`, `total_value`, `per_job`,
 `start_levels`/`end_levels`.
 
 ## Structure
 
 ```
 dofusjobs/
-  models.py      # dataclasses (Resource, Cell, CellResource, RouteResult, LevelUp)
-  mapgraph.py    # graphe des vraies maps + BFS (coût + chemin + directions ↑↓←→)
+  models.py      # dataclasses (Resource, Cell, CellResource, ...)
+  mapgraph.py    # graphe des vraies maps + BFS (coût + chemin + directions ↑↓←→ + composantes)
   leveling.py    # table XP<->niveau (pilote la simulation des paliers)
-  optimizer.py   # moteur séquentiel: efficacité XP/pod + simulation level-up + BFS borné
+  farmloop.py    # moteur v4: score map = Σ%XP, route gloutonne sans pods + level-up sim
+  optimizer.py   # (legacy v2/v3) moteur séquentiel sous pods, conservé pour `plan_route`
   ingestion.py   # chargement du dataset réel (resources / cells / maps)
   __main__.py    # CLI
 webapp/app.py    # serveur web stdlib (form + /api/route)
 scripts/build_dofusmap_counts.py  # crawl+décode les counts par map (dofus-map, cache)
 scripts/build_dofusdb_dataset.py  # catalogue DofusDB + bridge dofus-map + cells
-tests/           # unittest: pods, gating, free start, objectif pondéré, level-up, déterminisme
+tests/           # unittest: route sans pods, gating, composante riche, paliers, déterminisme
 data/            # resources.json, world_cells.json, world_maps.json, job_xp_table.json
 ```
 
@@ -185,13 +188,15 @@ data/            # resources.json, world_cells.json, world_maps.json, job_xp_tab
   ressource (vrais counts dofus-map) mais pas la cellule exacte *dans* l'écran — non
   nécessaire pour un modèle de trajet inter-maps. Les 8 ressources sans données
   dofus-map (ex. Bois de Pin, Cristal liquide, Pichons) gardent la répartition
-  sous-zone uniforme. Le count dofus-map est une densité (capée à 10), pas un nombre
-  de spots garanti à l'instant T.
+  sous-zone uniforme. Le count dofus-map est une densité (hubs dé-agrégés au-dessus
+  de 30, total conservé), pas un nombre de spots garanti à l'instant T.
 - `base_xp` est **calibré communautaire** (DofusDB n'a pas l'XP de récolte) ; la
   table d'XP de métier est la formule Dofus Pour Les Noobs.
-- Sélection **greedy par efficacité** + **BFS borné** (rayon `reach`, passe locale).
-  Un **beam/lookahead** et un mode **cibles/poids par métier** restent des extensions.
-- Pas de retour banque ni de re-planification live (choix « simulation dans le plan »).
+- Sélection **gloutonne** (meilleur score/écran) + **BFS borné** (rayon `reach`) :
+  rapide et déterministe, mais pas un optimum global — un **beam/lookahead** reste
+  une extension. La route récolte chaque map **une fois** (single pass) ; pour une
+  session répétée, relance à mesure que tes niveaux montent. L'ancien moteur sous
+  pods reste disponible via `plan_route` (`dofusjobs/optimizer.py`).
 
 ## Licence
 
