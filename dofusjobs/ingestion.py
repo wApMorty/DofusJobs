@@ -2,7 +2,8 @@
 
 Files (data/):
   resources.json  : gathering resources (real DofusDB level/pods, calibrated XP).
-  world_cells.json: per-map cells with resources (sub-area counts spread over maps).
+  world_cells.json: per-map cells with resources (real dofus-map positions on the
+                    worldMap=1 surface; sub-area spread fallback where dofus-map lacks data).
   world_maps.json : real main-world map coordinates (graph nodes).
 
 Rows failing the data contract are dropped and logged to stderr.

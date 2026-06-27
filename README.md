@@ -20,16 +20,16 @@ map entièrement et en simulant les paliers, pour monter tous tes métiers vers 
 > monte, son %XP baisse → la route bascule et **équilibre tout vers 200**.
 
 
-- **Données réelles (DofusDB)** : 85 ressources avec **niveau et pods authentiques**.
-  Placement = **compte autoritaire `resourcesBySubarea` réparti sur les maps de la
-  sous-zone**, en **ne gardant que `worldMap=1`** (la surface). Ce filtre structurel
-  est la clé : la majorité du fer/blé/poisson vit en `worldMap=-1` (intérieurs,
-  donjons, mines) ou sur d'autres continents (`worldMap=3`…) — exclus par
-  construction. La coord « null-island » **(0,0)** de DofusDB (1779 maps sans coords
-  réelles) est aussi écartée. Voir `scripts/build_dofusdb_dataset.py`. *(La piste
-  dofus-map `getRessourceData` a été abandonnée pour le placement : son `groupId=0`
-  fusionne tous les worldmaps et projette les intérieurs sur la surface → comptes
-  gonflés et non fiables. Le worldMap DofusDB est le vrai signal structurel.)*
+- **Données réelles (DofusDB + dofus-map)** : 85 ressources avec **niveau et pods
+  authentiques** (DofusDB). **Placement aux vraies positions case-par-case** de
+  dofus-map (`getRessourceData`, `groupId=0`), intersectées avec la surface
+  (`worldMap=1`) et **cap à 10** par map (la projection dofus-map gonfle quelques
+  entrées de zones d'intérieur). Conséquence directe : **une map recommandée porte
+  réellement la ressource annoncée en jeu** (~100 % vs ~12 % avec l'ancien étalement
+  par sous-zone, qui plaçait la ressource sur toutes les maps de la sous-zone). Repli
+  sur le compte `resourcesBySubarea` DofusDB (proratisé surface, réparti) pour les ~7
+  ressources sans données dofus-map. La coord « null-island » **(0,0)** de DofusDB
+  (1779 maps sans coords réelles) est écartée. Voir `scripts/build_dofusdb_dataset.py`.
 - **Départ libre** : aucun ancrage. Le moteur **choisit le meilleur point de départ**
   (premier stop à coût de trajet nul), **dans la composante connexe la plus riche** —
   le monde a beaucoup d'îles reliées seulement par bateau/zaap (83 composantes), et
@@ -85,6 +85,7 @@ jour Dofus, ou un clone sans les data) : sous **Windows**, double-clique
 **`install.bat`** ; sinon, en ligne de commande (idempotent) :
 
 ```bash
+python3 scripts/build_dofusmap_counts.py   # positions réelles par map (cache disque)
 python3 scripts/build_dofusdb_dataset.py   # catalogue + cells (worldMap=1)
 ```
 
@@ -94,18 +95,19 @@ Artefacts :
   `pods` **authentiques DofusDB** (`api.dofusdb.fr`). `base_xp` = **calibré
   communautaire** (`xp ≈ 7 + 0.36·niveau`, ancré sur next-stage) car DofusDB
   n'expose pas l'XP de récolte.
-- **`world_cells.json`** : ~2500 cellules (une par map portant des ressources). La
-  quantité d'une ressource sur une map = le **compte DofusDB de sa sous-zone**,
-  **proratisé à la part de surface** (`× positions worldMap=1 / positions totales` :
-  une mine majoritairement intérieure ne met sur la surface que la fraction de ses
-  entrées), **réparti** sur les maps `worldMap=1` de la sous-zone, et **dédupliqué**
-  (une coord dans plusieurs sous-zones qui se recouvrent ne reçoit la ressource que
-  d'une seule). Pas de seuil ni de cap. Résultat : quantités réalistes (fer ≤ 9,
-  poisson/blé/bois ≤ 3) — les faux hubs (fusion worldmaps de dofus-map, null-island
-  (0,0), entrées de mines empilées) sont tous éliminés **structurellement**.
-- *(déprécié)* **`dofusmap_counts.json`** / `scripts/build_dofusmap_counts.py` : la
-  carto dofus-map décodée n'est **plus utilisée** pour le placement (counts gonflés
-  par la fusion des worldmaps) ; conservés pour référence.
+- **`dofusmap_counts.json`** / `scripts/build_dofusmap_counts.py` : **les vraies
+  positions case-par-case** de chaque ressource (dofus-map, `groupId=0`, décodées et
+  cachées sous `data/cache/dofusmap/`). C'est **la source de placement** : une map
+  recommandée porte réellement la ressource annoncée en jeu.
+- **`world_cells.json`** : ~3300 cellules (une par map portant des ressources). Pour
+  chaque ressource, on place sa quantité **aux coordonnées réelles dofus-map**,
+  intersectées avec le graphe de surface (`world_maps.json`, worldMap=1) et **cap à
+  10** par map (la projection dofus-map gonfle quelques entrées de zones d'intérieur ;
+  la présence prime, le count ne fait que pondérer la récolte). **Repli** sur le
+  compte DofusDB de la sous-zone (proratisé surface, réparti, dédupliqué) seulement
+  pour les ~7 ressources sans données dofus-map (bois de pin, cendrepierre, cristaux,
+  pichons, tulipe en papier). Le pont noms DofusDB↔dofus-map (`Bois de Frêne`↔
+  `Frêne`, `Crabe Sourimi`↔`Crabe`…) est dans `build_dofusdb_dataset.py:dofusmap_slugs`.
 - **`world_maps.json`** : ~6200 vraies maps du monde principal = les nœuds du graphe.
 - **Table d'XP de métier** (`data/job_xp_table.json`), cap **niveau 200** :
   **formule fermée exacte** `cumulative(N) = 10·N·(N−1)` (chaque niveau coûte +20 XP

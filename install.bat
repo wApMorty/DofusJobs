@@ -26,6 +26,16 @@ echo   Construction des donnees depuis l'API DofusDB...
 echo   (necessite une connexion Internet, ca prend 1 a 2 minutes)
 echo.
 
+%PY% scripts\build_dofusmap_counts.py
+if errorlevel 1 (
+  echo.
+  echo   [X] Echec du telechargement des positions de ressources.
+  echo       Verifie ta connexion Internet, puis relance install.bat.
+  echo.
+  pause
+  exit /b 1
+)
+
 %PY% scripts\build_dofusdb_dataset.py
 if errorlevel 1 (
   echo.

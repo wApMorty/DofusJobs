@@ -8,12 +8,16 @@ Outputs (data/):
   world_maps.json : every real map coordinate of the main world (worldMap=1) ->
                     the graph nodes (used for real A* walking distance).
   world_cells.json: per-map cells — each map coord that bears resources, with
-                    [{resource_id, quantity}]. A sub-area's resource count is
-                    spread across that sub-area's maps (no finer data exists).
+                    [{resource_id, quantity}]. Placement uses the REAL per-map
+                    positions from dofus-map (data/dofusmap_counts.json, built by
+                    build_dofusmap_counts.py), intersected with the worldMap=1
+                    surface and capped at PER_MAP_CAP. The ~7 resources dofus-map
+                    doesn't cover fall back to a sub-area spread of the DofusDB count.
 
 All data is authoritative DofusDB except base_xp (community-calibrated:
 xp ≈ 7 + 0.36*level, anchored on next-stage wood values) — DofusDB has no
-harvest XP.
+harvest XP — and resource positions, which come from dofus-map (DofusDB only
+exposes per-sub-area counts, too coarse to know which map bears what).
 """
 from __future__ import annotations
 import json, os, re, time, urllib.request
@@ -26,6 +30,16 @@ UA = {"User-Agent": "DofusJobs/1.0 (gathering-route optimizer; official API)"}
 
 TYPE_JOB = {34: "farmer", 35: "herbalist", 36: "herbalist", 38: "lumberjack",
             39: "miner", 41: "fisherman", 49: "fisherman"}
+
+# Real per-map resource positions (dofus-map, groupId=0). See build_dofusmap_counts.py.
+DM_COUNTS = os.path.join(DATA, "dofusmap_counts.json")
+# dofus-map's groupId=0 projects interior spawns onto surface entrance coords, so a
+# few hub coords get inflated counts. Cap per-map quantity (presence is what matters
+# for routing; the count only weights the grab).
+PER_MAP_CAP = 10
+# DofusDB names the wood ("Bois de Frêne"); dofus-map names the tree ("Frêne"). A few
+# resources also differ by common name.
+DM_EXTRA = {"Crabe Sourimi": "crabe", "Raie Bleue": "raie"}
 
 
 def get(url, timeout=25):
@@ -40,6 +54,18 @@ def slug(name):
                  ("'", "_"), ("-", "_"), (" ", "_")):
         s = s.replace(a, b)
     return re.sub(r"[^a-z0-9_]", "", s)
+
+
+def dofusmap_slugs(name):
+    """Candidate dofus-map slugs for a DofusDB resource name (best match first)."""
+    cands = [slug(name)]
+    low = name.lower()
+    for pre in ("bois de ", "bois d'"):
+        if low.startswith(pre):
+            cands.append(slug(name[len(pre):]))
+    if name in DM_EXTRA:
+        cands.append(DM_EXTRA[name])
+    return cands
 
 
 def harvest_xp(level):
@@ -143,22 +169,52 @@ def main():
     print("2b) sub-area total map counts (apportion to surface share) ...")
     sa_total = fetch_subarea_total_maps(sub2coords.keys())
 
-    print("3) building cells (authoritative DofusDB counts, worldMap=1 surface only) ...")
+    dmcounts = {}
+    if os.path.exists(DM_COUNTS):
+        dmcounts = json.load(open(DM_COUNTS, encoding="utf-8"))
+        print(f"   real per-map positions (dofus-map): {sum(1 for v in dmcounts.values() if v)} resources")
+    else:
+        print("   !! dofusmap_counts.json missing -> sub-area spread fallback for ALL resources"
+              " (run scripts/build_dofusmap_counts.py first)")
+
+    print("3) building cells (real dofus-map positions; sub-area spread fallback) ...")
     cell_res = defaultdict(dict)   # (x,y) -> {rid: qty}
-    n_placed = n_absent = 0
+    n_placed = n_absent = n_dm = 0
     for rid, meta in resources.items():
-        # MAGNITUDE = DofusDB's authoritative count per sub-area, spread over that
-        # sub-area's maps. `sub2coords` holds ONLY worldMap=1 maps, so interior
-        # sub-areas (worldMap=-1, where most fish/ore actually lives) and other
-        # continents (worldMap=3...) are excluded by construction — that removes the
-        # "hubs" at the source. (We tried dofus-map's per-coord counts for finer
-        # placement, but its groupId=0 merges every worldmap and projects interior
-        # spawns onto the surface entrance coord — inflated and unreliable, so the
-        # real surface signal is DofusDB's worldMap=1 sub-area count, no thresholds.)
-        # A surface coord can sit in several overlapping sub-areas (a mine entrance
-        # is both on the mountain and in the mine zone). Give the resource to each
-        # coord from only ONE of its sub-areas (dedup) so it isn't summed into a
-        # fake hub (e.g. iron at the Mine Istairameur entrance).
+        # PRIMARY: real per-map positions from dofus-map (which map actually bears the
+        # resource), intersected with our worldMap=1 surface graph and capped to tame
+        # the inflated interior-entrance hubs. This is what makes a recommended map
+        # actually hold the announced resource in-game.
+        dmc = None
+        for key in dofusmap_slugs(meta["name"]):
+            if dmcounts.get(key):
+                dmc = dmcounts[key]
+                break
+        if dmc:
+            placed = False
+            for ck, cnt in dmc.items():
+                try:
+                    x, y = (int(v) for v in ck.split(","))
+                except ValueError:
+                    continue
+                if (x, y) not in coords:        # keep only surface (worldMap=1) maps
+                    continue
+                q = min(int(cnt), PER_MAP_CAP)
+                if q > 0:
+                    cell_res[(x, y)][rid] = cell_res[(x, y)].get(rid, 0) + q
+                    placed = True
+            if placed:                          # real positions landed on the surface
+                n_placed += 1
+                n_dm += 1
+                continue
+            # else: dofus-map data is entirely off our surface graph (e.g. interior-
+            # only spawns) -> fall through to the sub-area spread below.
+
+        # FALLBACK (no usable dofus-map data): DofusDB's authoritative count per
+        # sub-area, spread over that sub-area's worldMap=1 maps. Coarse (a sub-area's
+        # resource lands on all its maps) but the only signal for the ~7 resources
+        # dofus-map doesn't cover. A surface coord can sit in several overlapping
+        # sub-areas; dedup so it isn't summed into a fake hub.
         placed = False
         seen = set()
         for sa, count in sorted(meta["subareas"]):
@@ -188,7 +244,8 @@ def main():
             seen.update(maps)
         n_placed += placed
         n_absent += not placed
-    print(f"   resources on the surface: {n_placed}; off-surface only (interior/other worldmap): {n_absent}")
+    print(f"   resources on the surface: {n_placed} ({n_dm} via real dofus-map positions, "
+          f"{n_placed - n_dm} via sub-area spread); off-surface only: {n_absent}")
     cells = [{"cell_id": f"{x},{y}", "world_coords": [x, y],
               "resources": [{"resource_id": r, "quantity": q} for r, q in sorted(rs.items())]}
              for (x, y), rs in sorted(cell_res.items())]

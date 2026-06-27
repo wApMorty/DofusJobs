@@ -1,4 +1,11 @@
-# État — cartographie case-level via dofus-map : ✅ LIVRÉE (2026-06-27)
+# État — cartographie case-level via dofus-map : ✅ source de placement (2026-06-27)
+
+> MàJ : après une parenthèse où le placement repassait par l'étalement sous-zone
+> (commit `3c567b3`, qui plaçait une ressource sur TOUTES les maps de sa sous-zone →
+> ~12 % des maps recommandées portaient vraiment la ressource en jeu), dofus-map est
+> redevenu **la** source de placement dans `build_dofusdb_dataset.py` (fonction
+> `dofusmap_slugs`, cap `PER_MAP_CAP=10`, intersection surface). ~100 % des maps
+> recommandées sont correctes ; repli sous-zone pour les ~7 ressources sans données.
 
 La piste dofus-map `groupId=0` est **intégrée et validée**. Les vrais counts par
 map remplacent la répartition sous-zone uniforme pour 77/85 ressources.
