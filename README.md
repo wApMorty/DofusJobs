@@ -110,7 +110,9 @@ Affiche le chemin ordonné (maps), des **instructions de déplacement lisibles**
 (`→×2 ↑` au lieu de coords brutes — le vrai chemin BFS entre deux stops,
 ordre préservé), l'XP totale et par métier, les pods, le coût de déplacement, **les
 level-ups en cours de passe** (et ce qu'ils débloquent). **Clic sur une coordonnée**
-= copie la commande `/travel x y` dans le presse-papier (autopilote en jeu).
+= copie la commande `/travel x y` dans le presse-papier (autopilote en jeu). Deux
+vues : onglet **Liste** (toutes les instructions d'un coup) et onglet **Interactif**
+(étape par étape, en grand, avec navigation Précédent/Suivant et barre de progression).
 
 ### Ligne de commande
 

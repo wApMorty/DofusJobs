@@ -34,6 +34,28 @@
   .coord { cursor:pointer; color:var(--acc); font-weight:600; border-bottom:1px dashed var(--acc); white-space:nowrap; }
   .coord:hover { background:#1f3a44; }
   .coord.copied { color:#8fd3e8; border-bottom-color:transparent; }
+  /* tabs */
+  .tabs { display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid #333; }
+  .tab { width:auto; margin:0; padding:10px 20px; background:transparent; color:var(--mut); border:0; border-bottom:2px solid transparent; border-radius:0; font-weight:700; font-size:14px; cursor:pointer; }
+  .tab:hover { color:var(--txt); }
+  .tab.active { color:var(--acc); border-bottom-color:var(--acc); }
+  .panel { display:none; }
+  .panel.active { display:block; }
+  /* interactive step */
+  .step-progress { height:6px; background:#1b1f24; border:1px solid #333; border-radius:5px; overflow:hidden; margin-bottom:16px; }
+  .step-bar { height:100%; background:var(--acc); transition:width .2s ease; }
+  .step-head { font-size:22px; margin-bottom:16px; }
+  .muted { color:var(--mut); font-weight:400; }
+  .step-card { background:#1b1f24; border:1px solid #333; border-radius:12px; padding:24px; display:flex; flex-direction:column; gap:22px; }
+  .step-lab { color:var(--mut); font-size:12px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:10px; }
+  .big-dirs { font-size:34px; line-height:1.3; }
+  .big-dirs .dir { font-size:30px; padding:4px 12px; margin:2px; }
+  .step-harv .badge { font-size:16px; padding:5px 13px; }
+  .coord.big { font-size:28px; padding:8px 16px; display:inline-block; border-bottom-width:2px; }
+  .step-nav { display:flex; gap:12px; margin-top:20px; }
+  .navbtn { width:auto; flex:1; margin:0; padding:15px; font-size:16px; background:#2f3640; color:var(--txt); }
+  .navbtn.primary { background:var(--acc); color:#10210f; }
+  .navbtn:disabled { opacity:.35; cursor:default; }
   .badge { display:inline-block; background:#2f3640; border-radius:5px; padding:1px 7px; margin:1px; font-size:12px; }
   .dir { display:inline-block; background:#1f3a44; color:#8fd3e8; border-radius:5px; padding:1px 7px; margin:1px; font-size:12px; white-space:nowrap; }
   .empty { color:var(--mut); }
@@ -81,6 +103,7 @@
 const JOBS = Array.from(document.querySelectorAll('[name^=lvl_]')).map(i => i.name.slice(4));
 const form = document.getElementById('form');
 const resultEl = document.getElementById('result');
+let lastData = null, stepIdx = 0;   // interactive-tab state
 
 async function copyText(text) {
   try {
@@ -152,24 +175,19 @@ function render(d) {
 
   const lupByStop = {};
   (d.level_ups||[]).forEach(lu => { (lupByStop[lu.at_stop_index] ||= []).push(lu); });
+  lastData = d; stepIdx = 0;
 
   let rows = '';
   d.route.forEach((s, i) => {
-    const harv = {};
-    s.harvests.forEach(h => { harv[h.resource_name] = (harv[h.resource_name]||0)+1; });
-    const acts = Object.entries(harv).map(([n,c]) => `<span class="badge">${n} ×${c}</span>`).join(' ')
-                 || '<span class="empty">—</span>';
-    const dirs = (s.directions||[]).map(x => `<span class="dir">${x}</span>`).join(' ');
     const move = i===0
       ? '<span class="empty">départ</span>'
-      : `${dirs || '<span class="empty">sur place</span>'} <small>(${s.travel_cost_from_prev} écran${s.travel_cost_from_prev>1?'s':''})</small>`;
-    const [cx, cy] = s.world_coords;
+      : `${dirsHtml(s) || '<span class="empty">sur place</span>'} <small>(${s.travel_cost_from_prev} écran${s.travel_cost_from_prev>1?'s':''})</small>`;
     rows += `<tr>
       <td>${i}</td>
-      <td><span class="coord" data-cmd="/travel ${cx} ${cy}" title="Cliquer pour copier « /travel ${cx} ${cy} »">[${cx}, ${cy}]</span></td>
+      <td>${coordChip(s)}</td>
       <td>${move}</td>
       <td>${s.stop_xp}</td>
-      <td>${acts}</td></tr>`;
+      <td>${harvestBadges(s)}</td></tr>`;
     (lupByStop[i]||[]).forEach(lu => {
       const unl = lu.unlocked && lu.unlocked.length ? ` → débloque <b>${lu.unlocked.join(', ')}</b>` : '';
       rows += `<tr><td></td><td colspan="4" class="lvlup">⬆ ${labels[lu.job_id]||lu.job_id} ${lu.from_level}→${lu.to_level}${unl}</td></tr>`;
@@ -177,13 +195,79 @@ function render(d) {
   });
   resultEl.innerHTML = `
     ${metrics}
-    <div style="margin-bottom:10px">Détail par métier : ${byJob}</div>
-    <div class="hint" style="margin-bottom:6px">💡 Clique sur une coordonnée pour copier la commande <code>/travel x y</code> (autopilote en jeu).</div>
-    <table>
-      <thead><tr><th>#</th><th>Coords</th><th>Déplacement</th><th>XP</th><th>Récoltes</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <div class="reason">Fin de passe : <code>${d.terminated_reason}</code></div>`;
+    <div style="margin-bottom:12px">Détail par métier : ${byJob}</div>
+    <div class="tabs">
+      <button class="tab active" data-tab="list">📋 Liste</button>
+      <button class="tab" data-tab="step">🧭 Interactif</button>
+    </div>
+    <div id="panel-list" class="panel active">
+      <div class="hint" style="margin-bottom:6px">💡 Clique sur une coordonnée pour copier la commande <code>/travel x y</code> (autopilote en jeu).</div>
+      <table>
+        <thead><tr><th>#</th><th>Coords</th><th>Déplacement</th><th>XP</th><th>Récoltes</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="reason">Fin de passe : <code>${d.terminated_reason}</code></div>
+    </div>
+    <div id="panel-step" class="panel"></div>`;
+  resultEl.querySelectorAll('.tab').forEach(t =>
+    t.addEventListener('click', () => switchTab(t.dataset.tab)));
+  renderStep(0);
+}
+
+function switchTab(name) {
+  resultEl.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab===name));
+  resultEl.querySelector('#panel-list').classList.toggle('active', name==='list');
+  resultEl.querySelector('#panel-step').classList.toggle('active', name==='step');
+}
+
+function harvestBadges(s) {
+  const harv = {};
+  s.harvests.forEach(h => { harv[h.resource_name] = (harv[h.resource_name]||0)+1; });
+  return Object.entries(harv).map(([n,c]) => `<span class="badge">${n} ×${c}</span>`).join(' ')
+         || '<span class="empty">—</span>';
+}
+function dirsHtml(s) {
+  return (s.directions||[]).map(x => `<span class="dir">${x}</span>`).join(' ');
+}
+function coordChip(s, cls) {
+  const [cx, cy] = s.world_coords;
+  return `<span class="coord ${cls||''}" data-cmd="/travel ${cx} ${cy}" title="Cliquer pour copier « /travel ${cx} ${cy} »">[${cx}, ${cy}]</span>`;
+}
+
+function renderStep(i) {
+  const d = lastData; if (!d) return;
+  const N = d.route.length;
+  stepIdx = Math.max(0, Math.min(i, N-1));
+  const s = d.route[stepIdx];
+  const labels = d.job_labels || {};
+  const lup = (d.level_ups||[]).filter(lu => lu.at_stop_index===stepIdx);
+  const pct = N>1 ? Math.round(stepIdx/(N-1)*100) : 100;
+
+  const move = stepIdx===0
+    ? `<div class="big-dirs"><span class="empty">Point de départ</span></div>`
+    : `<div class="big-dirs">${dirsHtml(s) || '<span class="empty">sur place</span>'}</div>
+       <div class="muted" style="margin-top:6px">${s.travel_cost_from_prev} écran${s.travel_cost_from_prev>1?'s':''} depuis l'étape précédente</div>`;
+
+  const lupHtml = lup.map(lu => {
+    const unl = lu.unlocked && lu.unlocked.length ? ` → débloque <b>${lu.unlocked.join(', ')}</b>` : '';
+    return `<div class="lvlup">⬆ ${labels[lu.job_id]||lu.job_id} ${lu.from_level}→${lu.to_level}${unl}</div>`;
+  }).join('');
+
+  resultEl.querySelector('#panel-step').innerHTML = `
+    <div class="step-progress"><div class="step-bar" style="width:${pct}%"></div></div>
+    <div class="step-head">Étape <b>${stepIdx+1}</b> <span class="muted">/ ${N}</span></div>
+    <div class="step-card">
+      <div><div class="step-lab">Déplacement</div>${move}</div>
+      <div><div class="step-lab">Destination — clique pour copier <code>/travel</code></div>${coordChip(s, 'big')}</div>
+      <div><div class="step-lab">À récolter ici · ${s.stop_xp} XP</div><div class="step-harv">${harvestBadges(s)}</div></div>
+      ${lupHtml ? `<div>${lupHtml}</div>` : ''}
+    </div>
+    <div class="step-nav">
+      <button class="navbtn" ${stepIdx===0?'disabled':''} data-step="prev">◀ Précédent</button>
+      <button class="navbtn primary" ${stepIdx===N-1?'disabled':''} data-step="next">Suivant ▶</button>
+    </div>`;
+  resultEl.querySelectorAll('#panel-step .navbtn').forEach(b =>
+    b.addEventListener('click', () => renderStep(stepIdx + (b.dataset.step==='next'?1:-1))));
 }
 </script>
 </body>
