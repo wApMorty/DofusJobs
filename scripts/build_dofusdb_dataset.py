@@ -22,12 +22,14 @@ from collections import defaultdict
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
 
-# dofus-map per-map counts are mostly realistic spot counts (median 1, p90 3,
-# 97% <= 8) but a rare hub tail (a few maps aggregate a whole zone, up to ~105)
-# would let the optimizer dump its whole pods budget on a single screen and
-# collapse the tour. Clip that tail so location precision is kept while per-map
-# harvesting stays realistic; 0 disables the cap.
-PER_MAP_CAP = 10
+# dofus-map per-map counts are mostly realistic spot counts (median 1, p90 3),
+# with legitimately dense fields/forests/mines reaching ~26 (wheat), ~44 (iron).
+# A rarer aggregation tail collapses a whole water/mine network onto a few coords
+# (e.g. the 4 Astrub coords each carry ~100 of every fish). We keep counts RAW
+# (no cap) to preserve that real field density — a flat cap was destroying it
+# (wheat 26 -> 10). Trade-off: the optimizer may over-harvest those few
+# aggregation hubs in a single stop. Set to a positive int to re-enable a clip.
+PER_MAP_CAP = 0
 UA = {"User-Agent": "DofusJobs/1.0 (gathering-route optimizer; official API)"}
 
 TYPE_JOB = {34: "farmer", 35: "herbalist", 36: "herbalist", 38: "lumberjack",

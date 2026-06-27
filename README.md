@@ -80,9 +80,13 @@ sous-zone seule.) Artefacts :
   n'expose pas l'XP de récolte.
 - **`world_cells.json`** : ~3800 cellules (une par map portant des ressources). La
   quantité d'une ressource sur une map vient des **vrais counts dofus-map** (la
-  distribution est saine : médiane 1, p90 3 spots/map). Une rare queue de maps-hub
-  agrégées est **capée à 10** (`PER_MAP_CAP`) pour éviter qu'un seul écran n'aspire
-  tout le budget pods. **Filtre intérieurs/sous-maps** : dofus-map projette les
+  distribution est saine : médiane 1, p90 3 spots/map). Les counts sont gardés
+  **bruts** (pas de cap) pour préserver la densité réelle des champs/forêts/mines
+  (blé jusqu'à 26, fer 44 sur les maps-mine) — un cap plat les écrasait. Contrepartie
+  connue : dofus-map agrège parfois tout un réseau d'eau/mine sur quelques coords
+  (les 4 coords d'Astrub portent ~100 de chaque poisson), donc l'optimiseur peut
+  sur-récolter ces rares hubs en un seul stop (`PER_MAP_CAP` réactive un clip si
+  besoin). **Filtre intérieurs/sous-maps** : dofus-map projette les
   spawns d'intérieur (ex. truites/goujons des **égouts d'Astrub**) sur la coordonnée
   de surface parente, ce qui gonflait la case ET faussait la distance (il faudrait
   *explorer* l'intérieur). On ne garde donc une coord que si DofusDB confirme
