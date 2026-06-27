@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from .leveling import JobXpTable
-from .mapgraph import MapGraph
+from .mapgraph import MapGraph, path_directions
 from .models import GATHERING_JOBS, Cell, Coord, Resource
 
 _REACH = 45          # per-step search radius in screens (keeps each step cheap)
@@ -35,6 +35,9 @@ class LoopStop:
     directions: List[str]
     harvests: List[dict]            # {resource_id, resource_name, job_id, quantity, xp}
     value: float                    # %-levels (or xp) gained here per lap
+    # Free pick-ups on the intermediate maps walked through on the way to this
+    # stop (you cross them anyway): [{world_coords, harvests}].
+    transit: List[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -61,7 +64,8 @@ class FarmLoopResult:
             "terminated": self.terminated,
             "stops": [
                 {"world_coords": list(s.world_coords), "directions": s.directions,
-                 "value": round(s.value, 4), "harvests": s.harvests}
+                 "value": round(s.value, 4), "harvests": s.harvests,
+                 "transit": s.transit}
                 for s in self.stops
             ],
         }
@@ -172,7 +176,12 @@ class FarmLoopFinder:
                 terminated = "no_positive_gain" if pos is not None else "no_eligible_spot"
                 break
             _, c, travel, items, v = best
-            dirs = self.graph.directions(pos, c.world_coords) if pos is not None else []
+            # Walk the path: grab any eligible resources on the intermediate maps
+            # for free (we cross them anyway), then harvest the chosen map.
+            if pos is not None:
+                dirs, transit = self._walk_leg(pos, c.world_coords, visited, job_xp, cur_levels)
+            else:
+                dirs, transit = [], []
             screens += travel
             visited.add(c.world_coords)
             pos = c.world_coords
@@ -183,7 +192,7 @@ class FarmLoopFinder:
                 if lvl > cur_levels[job]:
                     cur_levels[job] = lvl
             stops.append(LoopStop(world_coords=pos, directions=dirs,
-                                  harvests=items, value=v))
+                                  harvests=items, value=v, transit=transit))
         else:
             terminated = "max_stops"
 
@@ -202,6 +211,44 @@ class FarmLoopFinder:
             start_levels={j: self.xp_table.level_for_xp(start_xp[j]) for j in GATHERING_JOBS},
             end_levels=dict(cur_levels))
 
+    def _eligible_items(self, cell: Cell, levels) -> List[dict]:
+        """The harvestable items on ``cell`` at these job levels."""
+        out = []
+        for cr in cell.resources:
+            r = self.resources[cr.resource_id]
+            if levels.get(r.job_id, 0) >= r.required_level:
+                out.append({"resource_id": r.resource_id, "resource_name": r.name,
+                            "job_id": r.job_id, "quantity": cr.quantity, "xp": r.base_xp})
+        return out
+
+    def _walk_leg(self, prev, dest, visited, job_xp, cur_levels):
+        """Walk the real BFS path ``prev`` -> ``dest``; harvest eligible resources
+        on the **intermediate** maps for free (you cross them anyway). Returns
+        ``(directions, transit)`` and mutates ``visited``/``job_xp``/``cur_levels``.
+        ``transit`` = ``[{world_coords, harvests}]`` for the maps grabbed en route."""
+        path = self.graph.shortest_path(prev, dest)
+        if not path:
+            return self.graph.directions(prev, dest), []     # disconnected: zaap/boat
+        transit = []
+        for mid in path[1:-1]:
+            if mid in visited:
+                continue
+            cell = self.cells_by_coord.get(mid)
+            if cell is None:
+                continue
+            items = self._eligible_items(cell, cur_levels)
+            if not items:
+                continue
+            visited.add(mid)
+            for it in items:
+                job = it["job_id"]
+                job_xp[job] += it["xp"] * it["quantity"]
+                lvl = self.xp_table.level_for_xp(job_xp[job])
+                if lvl > cur_levels[job]:
+                    cur_levels[job] = lvl
+            transit.append({"world_coords": list(mid), "harvests": items})
+        return path_directions(path), transit
+
     # -------------------------------------------------- interactive rolling plan
     def harvest_coord(self, job_xp: Dict[str, int], coord):
         """Apply harvesting the whole map at ``coord`` to ``job_xp`` (returns a
@@ -215,6 +262,20 @@ class FarmLoopFinder:
                 if levels.get(r.job_id, 0) >= r.required_level:
                     nx[r.job_id] += r.base_xp * cr.quantity
         return nx
+
+    def advance(self, job_xp: Dict[str, int], visited, prev_pos, dest):
+        """Commit walking ``prev_pos`` -> ``dest`` in the live planner: harvest the
+        free transit maps on the way AND ``dest`` (whole map). Returns the new
+        ``(job_xp, visited)`` (visited now includes the transit maps + dest)."""
+        job_xp = dict(job_xp)
+        vis = {tuple(c) for c in visited}
+        dest = tuple(dest)
+        if prev_pos is not None:
+            levels = {j: self.xp_table.level_for_xp(job_xp[j]) for j in GATHERING_JOBS}
+            self._walk_leg(tuple(prev_pos), dest, vis, job_xp, levels)
+        job_xp = self.harvest_coord(job_xp, dest)
+        vis.add(dest)
+        return job_xp, [list(c) for c in sorted(vis)]
 
     def plan_window(self, pos, job_xp: Dict[str, int], visited, horizon: int = 20,
                     metric: str = "levels", lambda_travel: float = 1.0,
@@ -290,11 +351,26 @@ class FarmLoopFinder:
         if not beam or not beam[0][0]:
             return []
         best = max(beam, key=lambda n: n[4] - lam * n[5])
+        # Materialise the window, computing the free transit pick-ups per leg on
+        # local copies of the state (preview — don't mutate the caller's).
         window = []
         prev = pos
+        vis = set(base_visited)
+        jx = dict(job_xp)
+        levels = {j: self.xp_table.level_for_xp(jx[j]) for j in GATHERING_JOBS}
         for co, items, v, travel in best[0]:
-            dirs = self.graph.directions(prev, co) if prev is not None else []
+            if prev is not None:
+                dirs, transit = self._walk_leg(prev, co, vis, jx, levels)
+            else:
+                dirs, transit = [], []
+            vis.add(co)
+            for it in items:                  # harvest the stop into the local copy
+                jx[it["job_id"]] += it["xp"] * it["quantity"]
+                lvl = self.xp_table.level_for_xp(jx[it["job_id"]])
+                if lvl > levels[it["job_id"]]:
+                    levels[it["job_id"]] = lvl
             window.append({"world_coords": list(co), "directions": dirs,
-                           "harvests": items, "value": round(v, 4), "travel": travel})
+                           "harvests": items, "value": round(v, 4), "travel": travel,
+                           "transit": transit})
             prev = co
         return window

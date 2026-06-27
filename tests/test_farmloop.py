@@ -106,5 +106,26 @@ class LivePlannerTest(unittest.TestCase):
         self.assertGreater(nx["lumberjack"], jx["lumberjack"])
 
 
+class TransitTest(unittest.TestCase):
+    def test_intermediate_maps_are_harvested_for_free(self):
+        a = Resource("a", "A", "miner", 20, 1, 1, 1)
+        # two rich endpoints, a small resource map between them on the straight path
+        cells = [cell("s", (0, 0), ("a", 10)), cell("e", (5, 0), ("a", 10)),
+                 cell("m", (2, 0), ("a", 3))]
+        r = finder([a], cells).find({"miner": 1}, lambda_travel=0.0)
+        transit = {tuple(t["world_coords"]) for s in r.stops for t in s.transit}
+        self.assertIn((2, 0), transit)           # grabbed en route, not skipped
+
+    def test_advance_harvests_transit_and_marks_visited(self):
+        a = Resource("a", "A", "miner", 20, 1, 1, 1)
+        cells = [cell("s", (0, 0), ("a", 5)), cell("e", (4, 0), ("a", 5)),
+                 cell("m", (2, 0), ("a", 5))]
+        f = finder([a], cells)
+        jx = {j: f.xp_table.xp_for_level(1) for j in GATHERING_JOBS}
+        njx, visited = f.advance(jx, [[0, 0]], [0, 0], [4, 0])
+        self.assertGreater(njx["miner"], jx["miner"])
+        self.assertIn([2, 0], visited)           # the transit map is now visited
+
+
 if __name__ == "__main__":
     unittest.main()

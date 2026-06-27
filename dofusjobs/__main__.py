@@ -67,6 +67,12 @@ def main(argv=None) -> int:
         move = "depart" if i == 0 else (" ".join(stop.directions) or "sur place")
         print(f"  {i:>3}. {str(list(stop.world_coords)):<11} {stop.value:6.2f}  [{acts}]")
         print(f"       ↳ {move}")
+        for t in stop.transit:                       # free pick-ups on the way
+            tc = Counter()
+            for h in t["harvests"]:
+                tc[h["resource_name"]] += h["quantity"]
+            acts_t = ", ".join(f"{n}x{cnt}" for n, cnt in tc.items())
+            print(f"         · au passage {t['world_coords']}: {acts_t}")
     return 0
 
 

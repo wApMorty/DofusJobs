@@ -74,7 +74,7 @@ map proche ne vaille le trajet. Déterministe (score, trajet, identifiants).
 
 ```bash
 cd DofusJobs
-python3 -m unittest discover -s tests   # 39 tests
+python3 -m unittest discover -s tests   # 41 tests
 ```
 
 ## Données
@@ -125,7 +125,9 @@ python3 -m webapp.app --port 8000          # http://127.0.0.1:8000
 Deux vues :
 - **Liste** — la route complète d'un coup (glouton) : maps ordonnées, **directions
   lisibles** (`→×2 ↑`, vrai chemin BFS), niveaux gagnés par métier, écrans, vitesse
-  (%XP/écran), **score %XP** par map.
+  (%XP/écran), **score %XP** par map, et les **récoltes « au passage »** : les maps
+  intermédiaires traversées sur le trajet BFS qui portent des ressources éligibles
+  sont récoltées **gratuitement** (tu passes dessus de toute façon).
 - **Interactif** — un **planificateur live à horizon glissant** : il affiche les
   **10/20/30 prochaines cases** (sélectionnable) calculées par **beam search**
   (lookahead, pas glouton-myope) et **replanifie à chaque clic**. **Suivant** valide
