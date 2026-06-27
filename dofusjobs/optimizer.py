@@ -101,6 +101,20 @@ class Optimizer:
             after = tbl.level_progress(job_xp[job_id] + units * base_xp)
             return 100.0 * (after - before)
 
+        def travel_penalty(job_id: str, travel: int) -> float:
+            """Cost of ``travel`` screens in the active metric's unit. ``lambda``
+            is XP-per-screen (per the spec); for 'levels' that XP is converted to
+            % of a level at the job's *current* XP, so the penalty shrinks with
+            level exactly like ``harvest_value`` does. Without this the % gains
+            (which scale ~1/level) would be crushed by a raw lambda at high level,
+            stalling the route with pods to spare."""
+            cost_xp = lam * travel
+            if metric == "xp" or cost_xp == 0:
+                return cost_xp
+            before = tbl.level_progress(job_xp[job_id])
+            after = tbl.level_progress(job_xp[job_id] + cost_xp)
+            return 100.0 * (after - before)
+
         # Mutable remaining quantities per (cell_id, resource_id).
         remaining: Dict[Tuple[str, str], int] = {}
         cell_by_id: Dict[str, Cell] = {}
@@ -151,7 +165,8 @@ class Optimizer:
                         continue
                     any_affordable = True
                     units = min(qty, pods_left // res.pods)
-                    value = harvest_value(res.job_id, units, res.base_xp) - lam * travel
+                    value = (harvest_value(res.job_id, units, res.base_xp)
+                             - travel_penalty(res.job_id, travel))
                     if value <= 0:
                         continue
                     eff = value / (units * res.pods)

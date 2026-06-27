@@ -95,6 +95,22 @@ class WeightedObjectiveTest(unittest.TestCase):
         self.assertEqual(len(res.route), 1)
         self.assertTrue(used <= {"near"} or used <= {"far"})
 
+    def test_levels_metric_does_not_stall_at_high_level(self):
+        # Regression: with metric='levels', lambda is XP-per-screen and must be
+        # converted to %-of-a-level at the current level. Otherwise a raw lambda
+        # crushes the (tiny, ~1/level) % gains at high level and the route stalls
+        # after the free first cell with pods to spare.
+        tbl = table_with({200: 400000})           # expensive levels: ~2010 xp/level
+        r = Resource("ore", "Ore", "miner", 30, 1, 1, 1)   # 1 unit/cell, 1 pod
+        cells = [cell(f"c{y}", (0, y), ("ore", 1)) for y in range(5)]  # a 5-screen line
+        o = opt([r], cells, table=tbl)
+        res = o.optimize(PlayerInput(xp_for(o, {"miner": 150}), pods_limit=100,
+                                     lambda_travel=2.0, metric="levels"))
+        # A neighbour 1 screen away (+30 xp) is worth far more than lambda*1 xp,
+        # so the route must walk the whole line, not stop at the start cell.
+        self.assertEqual(res.pods_used, 5)
+        self.assertGreater(len(res.route), 1)
+
 
 class LevelUpSimulationTest(unittest.TestCase):
     def test_mid_run_unlock_higher_tier(self):

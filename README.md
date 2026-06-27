@@ -33,9 +33,13 @@ pénalisant les déplacements**.
     peu : l'optimiseur **équilibre la montée de tous les métiers en parallèle** et
     évite de gaspiller dans un job déjà haut.
   - **`xp`** — maximise l'XP brute totale (favorise les ressources/jobs avancés).
-- **Pondération déplacement** : `score = objectif − λ·total_travel_cost`. `λ` règle
-  l'agressivité anti-déplacement (`λ=0` ignore le trajet) ; son unité suit
-  l'objectif (XP/écran ou %-niveau/écran).
+- **Pondération déplacement** : `score = objectif − λ·total_travel_cost`. `λ` est en
+  **XP par écran** (`λ=0` ignore le trajet). Pour l'objectif `levels`, cette XP est
+  **convertie en %-de-niveau au niveau courant** du métier, pour que la pénalité
+  rétrécisse avec le niveau **comme** le gain (sinon, à haut niveau, un λ brut
+  écrasait des gains de ~1% et la route calait avec des pods en réserve). La
+  décision « récolter ou pas » se ramène ainsi à `xp_récolte > λ·trajet`,
+  **invariante au niveau**.
 - **XP de récolte fidèle au jeu** : XP **fixe par ressource** (pas de malus de
   sur-niveau en récolte) ; le niveau ne fait que **gater** l'éligibilité.
 - **Pods = contrainte dure** : `0 ≤ pods_used ≤ pods_limit`, pas de retour banque.
@@ -58,7 +62,7 @@ borné) — réaliste et rapide. Déterministe (efficacité, valeur, trajet, ide
 
 ```bash
 cd DofusJobs
-python3 -m unittest discover -s tests   # 36 tests
+python3 -m unittest discover -s tests   # 37 tests
 ```
 
 ## Données
