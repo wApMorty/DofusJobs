@@ -80,6 +80,27 @@ class Optimizer:
                         "available_xp": xp, "pods_to_clear": pods})
         return out
 
+    def _richest_component_cells(self, job_levels: Dict[str, int]) -> List[Cell]:
+        """Cells of the connected component holding the most eligible value, used
+        to anchor a free start (a walking pass can't leave its component). Falls
+        back to all cells if the graph exposes no components."""
+        comps = self.graph.components()
+        if len(comps) <= 1:
+            return self.cells
+        coord_comp = {co: i for i, comp in enumerate(comps) for co in comp}
+        value = [0] * len(comps)
+        for c in self.cells:
+            i = coord_comp.get(c.world_coords)
+            if i is None:
+                continue
+            for cr in c.resources:
+                r = self.resources[cr.resource_id]
+                if job_levels.get(r.job_id, 0) >= r.required_level:
+                    value[i] += r.base_xp * cr.quantity        # eligible-XP proxy
+        best = max(range(len(comps)), key=lambda i: value[i])
+        chosen = comps[best]
+        return [c for c in self.cells if c.world_coords in chosen]
+
     # -------------------------------------------------------------------- solve
     def optimize(self, player: PlayerInput) -> RouteResult:
         lam = max(0.0, float(player.lambda_travel))
@@ -141,13 +162,21 @@ class Optimizer:
         cur_levels = dict(start_levels)
         prev_eligible = eligible_resource_ids(cur_levels)
 
+        # Free start: a walking pass is confined to one connected component (the
+        # world has many boat/zaap-only islands). Picking the single most
+        # efficient first harvest can strand the whole pass on a tiny island, so
+        # restrict the start to the component with the most eligible value.
+        free_start_cells = self.cells
+        if pos is None:
+            free_start_cells = self._richest_component_cells(cur_levels)
+
         while True:
             candidates = []
             any_eligible = any_affordable = False
             # One bounded BFS from the current position gives travel to every
             # nearby cell; iterate only those (far cells are never worth it).
             if pos is None:
-                cell_travel = [(c, 0) for c in self.cells]
+                cell_travel = [(c, 0) for c in free_start_cells]
             else:
                 dist = self.graph.distances_from(pos, max_dist=self.reach)
                 cell_travel = [(self.cells_by_coord[co], d)

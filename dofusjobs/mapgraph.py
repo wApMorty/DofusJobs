@@ -53,6 +53,7 @@ class MapGraph:
     def __init__(self, maps: Iterable[Coord]) -> None:
         self.nodes: Set[Coord] = {(int(x), int(y)) for x, y in maps}
         self._bfs_cache: Dict[Coord, Dict[Coord, int]] = {}
+        self._components = None
 
     def _neighbours(self, c: Coord):
         x, y = c
@@ -83,6 +84,31 @@ class MapGraph:
                         dq.append(nb)
         self._bfs_cache[key] = dist
         return dist
+
+    def components(self):
+        """Connected components of the map graph, as a list of coord-sets
+        (largest first). The world map has many disconnected islands reachable
+        only by boat/zaap, which a single walking pass cannot cross. Cached."""
+        if self._components is None:
+            seen: Set[Coord] = set()
+            comps = []
+            for n in self.nodes:
+                if n in seen:
+                    continue
+                comp: Set[Coord] = set()
+                dq = deque([n])
+                seen.add(n)
+                while dq:
+                    cur = dq.popleft()
+                    comp.add(cur)
+                    for nb in self._neighbours(cur):
+                        if nb not in seen:
+                            seen.add(nb)
+                            dq.append(nb)
+                comps.append(comp)
+            comps.sort(key=len, reverse=True)
+            self._components = comps
+        return self._components
 
     def shortest_path(self, a: Coord, b: Coord):
         """The list of maps from ``a`` to ``b`` inclusive (a real BFS path along

@@ -95,6 +95,20 @@ class WeightedObjectiveTest(unittest.TestCase):
         self.assertEqual(len(res.route), 1)
         self.assertTrue(used <= {"near"} or used <= {"far"})
 
+    def test_free_start_picks_richest_component(self):
+        # The world has boat/zaap-only islands (disconnected graph components). A
+        # free start must anchor in the component with the most eligible value,
+        # not strand the pass on a tiny island holding the single best harvest.
+        poor = Resource("poor", "P", "miner", 50, 1, 1, 1)   # high xp but 1 unit
+        rich = Resource("rich", "R", "miner", 10, 1, 1, 1)   # lower xp, lots of it
+        cells = [cell("isle", (0, 0), ("poor", 1)),
+                 cell("main", (50, 0), ("rich", 80))]
+        maps = [(0, y) for y in (-1, 0, 1)] + [(50, y) for y in (-1, 0, 1)]
+        o = Optimizer({"poor": poor, "rich": rich}, cells, maps=maps)
+        res = o.optimize(PlayerInput(xp_for(o, {"miner": 1}), 100, 0.0))
+        used = {h.resource_id for s in res.route for h in s.harvests}
+        self.assertEqual(used, {"rich"}, "must start in the richer component")
+
     def test_levels_metric_does_not_stall_at_high_level(self):
         # Regression: with metric='levels', lambda is XP-per-screen and must be
         # converted to %-of-a-level at the current level. Otherwise a raw lambda

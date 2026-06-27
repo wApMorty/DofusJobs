@@ -18,7 +18,10 @@ pénalisant les déplacements**.
   sous-zone `resourcesBySubarea` × `map-positions`. Voir `scripts/build_dofusmap_counts.py`
   (crawl+décodage) et `scripts/build_dofusdb_dataset.py` (bridge + assemblage).
 - **Départ libre** : aucun ancrage. Le moteur **choisit le meilleur point de départ**
-  (premier stop à coût de trajet nul). Tu peux aussi imposer un départ.
+  (premier stop à coût de trajet nul), **dans la composante connexe la plus riche** —
+  le monde a beaucoup d'îles reliées seulement par bateau/zaap (83 composantes), et
+  une passe à pied ne peut pas en sortir ; sans cet ancrage le départ pouvait
+  s'échouer sur une petite île. Tu peux aussi imposer un départ.
 - **Graphe de la vraie carte du monde** : nœuds = ~6200 vraies maps (worldMap=1),
   arêtes = maps cardinalement adjacentes existantes → le trajet suit le **vrai
   layout des continents** (pas de marche à travers la mer). Chaque cellule (map)
@@ -62,7 +65,7 @@ borné) — réaliste et rapide. Déterministe (efficacité, valeur, trajet, ide
 
 ```bash
 cd DofusJobs
-python3 -m unittest discover -s tests   # 37 tests
+python3 -m unittest discover -s tests   # 38 tests
 ```
 
 ## Données
