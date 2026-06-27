@@ -79,16 +79,13 @@ python3 -m unittest discover -s tests   # 39 tests
 
 ## Données
 
-Rebuild (les deux scripts sont idempotents et mettent en cache dans `data/`) :
+Rebuild (depuis l'API DofusDB, idempotent) :
 
 ```bash
-python3 scripts/build_dofusmap_counts.py   # counts par map (dofus-map, ~80 req. cachées)
-python3 scripts/build_dofusdb_dataset.py   # catalogue DofusDB + bridge + cells
+python3 scripts/build_dofusdb_dataset.py   # catalogue + cells (worldMap=1)
 ```
 
-(`build_dofusmap_counts` n'a aucune dépendance ; `build_dofusdb_dataset` lit
-`data/dofusmap_counts.json` s'il existe, sinon il retombe sur la répartition
-sous-zone seule.) Artefacts :
+Artefacts :
 
 - **`resources.json`** : 85 ressources récoltables — `job`, `required_level`,
   `pods` **authentiques DofusDB** (`api.dofusdb.fr`). `base_xp` = **calibré
