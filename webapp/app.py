@@ -54,17 +54,58 @@ def render_index() -> str:
 _XP_TABLE = JobXpTable.load()
 
 
+def _finder() -> FarmLoopFinder:
+    resources, cells, maps = get_data()
+    return FarmLoopFinder(resources, cells, maps=maps, xp_table=_XP_TABLE)
+
+
 def compute(payload: dict) -> dict:
     levels = payload.get("job_levels", {})
     job_levels = {j: int(levels.get(j, 1)) for j in GATHERING_JOBS}
     lam = float(payload.get("lambda_travel", 1.0))
     metric = "xp" if payload.get("metric") == "xp" else "levels"
-
-    resources, cells, maps = get_data()
-    finder = FarmLoopFinder(resources, cells, maps=maps, xp_table=_XP_TABLE)
-    out = finder.find(job_levels, metric=metric, lambda_travel=lam).to_dict()
+    out = _finder().find(job_levels, metric=metric, lambda_travel=lam).to_dict()
     out["job_labels"] = JOB_LABELS_FR
     return out
+
+
+def plan(payload: dict) -> dict:
+    """Interactive rolling planner: returns the next ``horizon`` maps from the
+    current state, re-planned each call (beam lookahead). The client passes the
+    opaque ``state`` back, plus an optional ``commit`` (the map it just did or
+    skipped); the server applies it and re-plans."""
+    f = _finder()
+    horizon = max(1, min(40, int(payload.get("horizon", 20))))
+    lam = float(payload.get("lambda_travel", 1.0))
+    metric = "xp" if payload.get("metric") == "xp" else "levels"
+
+    st = payload.get("state")
+    if not st:                                   # session start
+        levels = payload.get("job_levels", {})
+        job_xp = {j: _XP_TABLE.xp_for_level(int(levels.get(j, 1))) for j in GATHERING_JOBS}
+        pos, visited = None, []
+    else:
+        job_xp = {j: int(st.get("job_xp", {}).get(j, 0)) for j in GATHERING_JOBS}
+        pos = st.get("pos")
+        visited = list(st.get("visited", []))
+        commit = payload.get("commit")
+        if commit and commit.get("coord") is not None:
+            coord = [int(commit["coord"][0]), int(commit["coord"][1])]
+            if commit.get("harvest"):
+                job_xp = f.harvest_coord(job_xp, coord)
+                pos = coord
+            visited.append(coord)                # advance or skip: don't suggest it again
+
+    window = f.plan_window(pos, job_xp, visited, horizon=horizon,
+                           metric=metric, lambda_travel=lam)
+    return {
+        "window": window,
+        "state": {"pos": pos, "job_xp": job_xp, "visited": visited},
+        "levels": {j: _XP_TABLE.level_for_xp(job_xp[j]) for j in GATHERING_JOBS},
+        "metric": metric,
+        "done": not window,
+        "job_labels": JOB_LABELS_FR,
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -86,13 +127,15 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b"not found", "text/plain")
 
     def do_POST(self):  # noqa: N802
-        if self.path != "/api/route":
+        handlers = {"/api/route": compute, "/api/plan": plan}
+        fn = handlers.get(self.path)
+        if fn is None:
             self._send(404, b'{"error":"not found"}', "application/json")
             return
         try:
             length = int(self.headers.get("Content-Length", 0))
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
-            result = compute(payload)
+            result = fn(payload)
             self._send(200, json.dumps(result).encode("utf-8"), "application/json")
         except Exception as exc:  # noqa: BLE001
             body = json.dumps({"error": str(exc)}).encode("utf-8")

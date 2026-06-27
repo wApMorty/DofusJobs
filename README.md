@@ -71,7 +71,7 @@ map proche ne vaille le trajet. Déterministe (score, trajet, identifiants).
 
 ```bash
 cd DofusJobs
-python3 -m unittest discover -s tests   # 43 tests
+python3 -m unittest discover -s tests   # 46 tests
 ```
 
 ## Données
@@ -132,12 +132,18 @@ sous-zone seule.) Artefacts :
 python3 -m webapp.app --port 8000          # http://127.0.0.1:8000
 ```
 
-Affiche la route ordonnée (maps), des **instructions de déplacement lisibles**
-(`→×2 ↑` au lieu de coords brutes — le vrai chemin BFS entre deux stops, ordre
-préservé), les **niveaux gagnés par métier**, les écrans parcourus, la **vitesse**
-(%XP/écran) et le **score %XP** de chaque map. **Clic sur une coordonnée** = copie
-la commande `/travel x y` (autopilote en jeu). Deux vues : onglet **Liste** (tout
-d'un coup) et onglet **Interactif** (étape par étape, navigation Précédent/Suivant).
+Deux vues :
+- **Liste** — la route complète d'un coup (glouton) : maps ordonnées, **directions
+  lisibles** (`→×2 ↑`, vrai chemin BFS), niveaux gagnés par métier, écrans, vitesse
+  (%XP/écran), **score %XP** par map.
+- **Interactif** — un **planificateur live à horizon glissant** : il affiche les
+  **10/20/30 prochaines cases** (sélectionnable) calculées par **beam search**
+  (lookahead, pas glouton-myope) et **replanifie à chaque clic**. **Suivant** valide
+  la case (récolte → niveaux mis à jour → fenêtre recalculée) ; **Sauter** l'exclut
+  et adapte la suite. Sans pods, tu peux **t'arrêter à tout moment** ; l'état (pos,
+  niveaux, cases faites) vit côté client, le serveur est sans état (`/api/plan`).
+
+**Clic sur une coordonnée** = copie la commande `/travel x y` (autopilote en jeu).
 
 ### Ligne de commande
 

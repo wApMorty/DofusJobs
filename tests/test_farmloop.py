@@ -7,7 +7,7 @@ import unittest
 
 from dofusjobs.farmloop import FarmLoopFinder
 from dofusjobs.leveling import JobXpTable
-from dofusjobs.models import Cell, CellResource, Resource
+from dofusjobs.models import GATHERING_JOBS, Cell, CellResource, Resource
 
 
 def cell(cid, coords, *res):
@@ -74,6 +74,36 @@ class FarmLoopTest(unittest.TestCase):
         b = f.find({"lumberjack": 1})
         self.assertEqual([s.world_coords for s in a.stops],
                          [s.world_coords for s in b.stops])
+
+
+class LivePlannerTest(unittest.TestCase):
+    def _finder(self):
+        res = [Resource("w", "W", "lumberjack", 20, 1, 1, 5)]
+        cells = [cell(f"c{i}", (i, 0), ("w", 5)) for i in range(5)]
+        return finder(res, cells)
+
+    def _xp(self, f):
+        return {j: f.xp_table.xp_for_level(1) for j in GATHERING_JOBS}
+
+    def test_window_has_lookahead_and_distinct_maps(self):
+        f = self._finder()
+        w = f.plan_window(None, self._xp(f), [], horizon=3, lambda_travel=0.0)
+        self.assertEqual(len(w), 3)
+        coords = [tuple(s["world_coords"]) for s in w]
+        self.assertEqual(len(set(coords)), 3)
+
+    def test_window_respects_visited(self):
+        f = self._finder()
+        w0 = f.plan_window(None, self._xp(f), [], horizon=2, lambda_travel=0.0)
+        first = w0[0]["world_coords"]
+        w1 = f.plan_window(None, self._xp(f), [first], horizon=2, lambda_travel=0.0)
+        self.assertNotIn(tuple(first), [tuple(s["world_coords"]) for s in w1])
+
+    def test_harvest_coord_raises_xp(self):
+        f = self._finder()
+        jx = self._xp(f)
+        nx = f.harvest_coord(jx, [0, 0])
+        self.assertGreater(nx["lumberjack"], jx["lumberjack"])
 
 
 if __name__ == "__main__":

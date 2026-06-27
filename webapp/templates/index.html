@@ -56,6 +56,10 @@
   .navbtn { width:auto; flex:1; margin:0; padding:15px; font-size:16px; background:#2f3640; color:var(--txt); }
   .navbtn.primary { background:var(--acc); color:#10210f; }
   .navbtn:disabled { opacity:.35; cursor:default; }
+  .live-top { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+  .chip { width:auto; margin:0 2px; padding:4px 11px; font-size:13px; font-weight:700; background:#2f3640; color:var(--txt); border-radius:6px; }
+  .chip.on { background:var(--acc); color:#10210f; }
+  details summary { cursor:pointer; }
   .badge { display:inline-block; background:#2f3640; border-radius:5px; padding:1px 7px; margin:1px; font-size:12px; }
   .dir { display:inline-block; background:#1f3a44; color:#8fd3e8; border-radius:5px; padding:1px 7px; margin:1px; font-size:12px; white-space:nowrap; }
   .empty { color:var(--mut); }
@@ -99,7 +103,8 @@
 const JOBS = Array.from(document.querySelectorAll('[name^=lvl_]')).map(i => i.name.slice(4));
 const form = document.getElementById('form');
 const resultEl = document.getElementById('result');
-let lastData = null, stepIdx = 0;   // interactive-tab state
+let lastData = null;                 // last full route (Liste tab)
+let sess = null, sessParams = null, liveHorizon = 20;   // live planner (Interactif)
 
 async function copyText(text) {
   try {
@@ -139,6 +144,7 @@ form.addEventListener('submit', async (e) => {
     lambda_travel: Number(form.lambda_travel.value || 0),
     metric: document.getElementById('metric').value,
   };
+  sessParams = payload;            // reused by the live planner (Interactif tab)
   try {
     const r = await fetch('/api/route', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
     const data = await r.json();
@@ -166,7 +172,7 @@ function render(d) {
     return `<span class="badge">${labels[j]||j}: ${sl}→${el} <small>(${g})</small></span>`;
   }).join(' ') || '<span class="empty">—</span>';
 
-  lastData = d; stepIdx = 0;
+  lastData = d;
 
   let rows = '';
   d.stops.forEach((s, i) => {
@@ -198,13 +204,14 @@ function render(d) {
     <div id="panel-step" class="panel"></div>`;
   resultEl.querySelectorAll('.tab').forEach(t =>
     t.addEventListener('click', () => switchTab(t.dataset.tab)));
-  renderStep(0);
+  sess = null;                     // reset the live session for the new search
 }
 
 function switchTab(name) {
   resultEl.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab===name));
   resultEl.querySelector('#panel-list').classList.toggle('active', name==='list');
   resultEl.querySelector('#panel-step').classList.toggle('active', name==='step');
+  if (name === 'step') { sess ? renderLive() : startLive(); }
 }
 
 function harvestBadges(s) {
@@ -219,31 +226,89 @@ function coordChip(s, cls) {
   return `<span class="coord ${cls||''}" data-cmd="/travel ${cx} ${cy}" title="Cliquer pour copier « /travel ${cx} ${cy} »">[${cx}, ${cy}]</span>`;
 }
 
-function renderStep(i) {
-  const d = lastData; if (!d || !d.stops.length) return;
-  const N = d.stops.length;
-  stepIdx = Math.max(0, Math.min(i, N-1));
-  const s = d.stops[stepIdx];
-  const pct = N>1 ? Math.round(stepIdx/(N-1)*100) : 100;
+// ---- Live rolling planner (Interactif tab) --------------------------------
+async function apiPlan(body) {
+  const r = await fetch('/api/plan', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({...sessParams, ...body, horizon: liveHorizon})});
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || 'erreur');
+  return d;
+}
 
-  const move = stepIdx===0
-    ? `<div class="big-dirs"><span class="empty">Point de départ</span></div>`
-    : `<div class="big-dirs">${dirsHtml(s) || '<span class="empty">sur place</span>'}</div>`;
+async function startLive() {
+  if (!sessParams) { resultEl.querySelector('#panel-step').innerHTML =
+    '<div class="empty">Lance d\'abord un calcul.</div>'; return; }
+  resultEl.querySelector('#panel-step').innerHTML = '<div class="empty">Calcul de la fenêtre…</div>';
+  try {
+    const d = await apiPlan({});            // no state -> session start
+    sess = {state:d.state, levels:d.levels, startLevels:d.levels, labels:d.job_labels,
+            window:d.window, done:d.done, screens:0};
+    renderLive();
+  } catch (e) { resultEl.querySelector('#panel-step').innerHTML = `<div class="reason">Erreur : ${e.message}</div>`; }
+}
 
-  resultEl.querySelector('#panel-step').innerHTML = `
-    <div class="step-progress"><div class="step-bar" style="width:${pct}%"></div></div>
-    <div class="step-head">Étape <b>${stepIdx+1}</b> <span class="muted">/ ${N}</span></div>
+async function liveStep(harvest) {            // harvest=true: avance ; false: saute
+  if (!sess || !sess.window.length) return;
+  const first = sess.window[0];
+  const btns = resultEl.querySelectorAll('#panel-step .navbtn'); btns.forEach(b => b.disabled = true);
+  try {
+    const d = await apiPlan({state: sess.state, commit:{coord:first.world_coords, harvest}});
+    if (harvest) sess.screens += (first.travel || 0);
+    sess.state = d.state; sess.levels = d.levels; sess.window = d.window; sess.done = d.done;
+    renderLive();
+  } catch (e) { btns.forEach(b => b.disabled = false); }
+}
+
+async function liveReplan() {                 // depth change: re-plan, keep state
+  if (!sess) return startLive();
+  const d = await apiPlan({state: sess.state});
+  sess.window = d.window; sess.levels = d.levels; sess.done = d.done; renderLive();
+}
+
+function renderLive() {
+  const panel = resultEl.querySelector('#panel-step');
+  if (!sess) return startLive();
+  const labels = sess.labels || {};
+  const gains = Object.keys(sess.levels).map(j => {
+    const g = sess.levels[j] - sess.startLevels[j];
+    return g > 0 ? `<span class="badge">${labels[j]||j}: ${sess.startLevels[j]}→${sess.levels[j]} <small>(+${g})</small></span>` : '';
+  }).filter(Boolean).join(' ') || '<span class="empty">—</span>';
+  const depth = [10,20,30].map(n => `<button class="chip ${n===liveHorizon?'on':''}" data-h="${n}">${n}</button>`).join('');
+
+  const head = `<div class="live-top">
+      <div><span class="muted">Fenêtre</span> ${depth} <small class="muted">cases d'avance</small></div>
+      <div class="muted">Parcouru : <b>${sess.screens}</b> écrans</div>
+    </div>
+    <div style="margin:8px 0">Niveaux gagnés : ${gains}</div>`;
+
+  if (sess.done || !sess.window.length) {
+    panel.innerHTML = head + `<div class="reason">Plus rien à proximité qui vaille le déplacement.</div>`;
+    panel.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => { liveHorizon = Number(b.dataset.h); liveReplan(); }));
+    return;
+  }
+  const cur = sess.window[0];
+  const move = (cur.directions && cur.directions.length) ? `<div class="big-dirs">${dirsHtml(cur)}</div>`
+                                                         : '<span class="empty">tu y es / départ</span>';
+  const preview = sess.window.slice(1).map((s,i) =>
+    `<tr><td>${i+2}</td><td>${coordChip(s)}</td><td>${dirsHtml(s)||'·'}</td><td>${(s.value||0).toFixed(0)}</td><td>${harvestBadges(s)}</td></tr>`).join('');
+
+  panel.innerHTML = head + `
     <div class="step-card">
-      <div><div class="step-lab">Déplacement</div>${move}</div>
-      <div><div class="step-lab">Destination — clique pour copier <code>/travel</code></div>${coordChip(s, 'big')}</div>
-      <div><div class="step-lab">À récolter ici · score ${(s.value||0).toFixed(1)} %XP</div><div class="step-harv">${harvestBadges(s)}</div></div>
+      <div class="step-lab">Prochaine case — clique la coord pour copier <code>/travel</code></div>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">${coordChip(cur,'big')} ${move}</div>
+      <div><div class="step-lab" style="margin-top:10px">À récolter · score ${(cur.value||0).toFixed(1)} %XP</div>
+        <div class="step-harv">${harvestBadges(cur)}</div></div>
     </div>
     <div class="step-nav">
-      <button class="navbtn" ${stepIdx===0?'disabled':''} data-step="prev">◀ Précédent</button>
-      <button class="navbtn primary" ${stepIdx===N-1?'disabled':''} data-step="next">Suivant ▶</button>
-    </div>`;
-  resultEl.querySelectorAll('#panel-step .navbtn').forEach(b =>
-    b.addEventListener('click', () => renderStep(stepIdx + (b.dataset.step==='next'?1:-1))));
+      <button class="navbtn" data-act="skip">⤳ Sauter</button>
+      <button class="navbtn primary" data-act="next">Suivant ▶</button>
+    </div>
+    <details style="margin-top:14px"><summary class="muted">Aperçu des ${sess.window.length-1} cases suivantes</summary>
+      <table style="margin-top:8px"><thead><tr><th>#</th><th>Coords</th><th>Dépl.</th><th>Score</th><th>Récoltes</th></tr></thead>
+      <tbody>${preview}</tbody></table></details>`;
+  panel.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => { liveHorizon = Number(b.dataset.h); liveReplan(); }));
+  panel.querySelector('[data-act=next]').addEventListener('click', () => liveStep(true));
+  panel.querySelector('[data-act=skip]').addEventListener('click', () => liveStep(false));
 }
 </script>
 </body>
