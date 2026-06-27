@@ -78,12 +78,19 @@ sous-zone seule.) Artefacts :
   `pods` **authentiques DofusDB** (`api.dofusdb.fr`). `base_xp` = **calibré
   communautaire** (`xp ≈ 7 + 0.36·niveau`, ancré sur next-stage) car DofusDB
   n'expose pas l'XP de récolte.
-- **`world_cells.json`** : ~3850 cellules (une par map portant des ressources). La
+- **`world_cells.json`** : ~3800 cellules (une par map portant des ressources). La
   quantité d'une ressource sur une map vient des **vrais counts dofus-map** (la
   distribution est saine : médiane 1, p90 3 spots/map). Une rare queue de maps-hub
   agrégées est **capée à 10** (`PER_MAP_CAP`) pour éviter qu'un seul écran n'aspire
-  tout le budget pods. Les ressources sans données dofus-map gardent la **répartition
-  sous-zone** (`resourcesBySubarea` réparti sur les `map-positions`).
+  tout le budget pods. **Filtre intérieurs/sous-maps** : dofus-map projette les
+  spawns d'intérieur (ex. truites/goujons des **égouts d'Astrub**) sur la coordonnée
+  de surface parente, ce qui gonflait la case ET faussait la distance (il faudrait
+  *explorer* l'intérieur). On ne garde donc une coord que si DofusDB confirme
+  qu'elle appartient à une **sous-zone de la ressource** (`resourcesBySubarea`) — les
+  sous-zones intérieures n'ayant pas de maps `worldMap=1`, leurs spawns sont écartés
+  (~240 projections retirées). Les ressources sans données dofus-map exploitables
+  gardent la **répartition sous-zone** (`resourcesBySubarea` réparti sur les
+  `map-positions`).
 - **`dofusmap_counts.json`** : counts bruts par map décodés de dofus-map, keyés par
   slug du nom dofus-map ; bridgés au catalogue par `build_dofusdb_dataset.py`
   (gère `Bois de Frêne`↔`Frêne`, `Crabe`↔`Crabe Sourimi`, `Raie`↔`Raie Bleue`).

@@ -162,21 +162,39 @@ def main():
         print(f"   dofus-map counts loaded for {len(dm_counts)} resources")
     cell_res = defaultdict(dict)   # (x,y) -> {rid: qty}
     n_real = n_fallback = 0
+    drops = []                     # (name, n_dropped) for the interior-spawn diag
+    flipped = []                   # had in-world dm coords but ALL filtered out
     for rid, meta in resources.items():
-        # Prefer real dofus-map case-level counts, kept only for coords that are
-        # real worldMap=1 maps (our graph nodes). Off-world spawns are dropped.
+        # The worldMap=1 maps DofusDB confirms this resource actually occupies
+        # (union of its resourcesBySubarea sub-areas). Interior/sub-map sub-areas
+        # contribute no worldMap=1 coords, so they are excluded by construction.
+        allowed = set()
+        for sa, _ in meta["subareas"]:
+            allowed |= sub2coords.get(sa, set())
+        # Prefer real dofus-map case-level counts, but keep a coord ONLY if it is
+        # one of this resource's confirmed surface maps. This drops sub-map spawns
+        # that dofus-map projects onto the parent surface coord (e.g. truites in
+        # the Astrub sewers showing up on the overworld) — they were both
+        # inflating the cell and faking a reachable (no-explore) distance.
         real = None
         for key in dofusmap_keys(meta["name"]):
             if key in dm_counts:
-                real = {c: q for c, q in dm_counts[key].items() if c in coords}
+                dm = dm_counts[key]
+                real = {c: q for c, q in dm.items() if c in allowed}
+                in_world = sum(1 for c in dm if c in coords)
+                n_drop = in_world - len(real)
+                if n_drop:
+                    drops.append((meta["name"], n_drop))
+                if in_world and not real:
+                    flipped.append((meta["name"], in_world))
                 break
-        if real:                       # at least one in-world spawn -> use real data
+        if real:                       # at least one confirmed surface spawn
             n_real += 1
             for c, q in real.items():
                 if PER_MAP_CAP:
                     q = min(q, PER_MAP_CAP)
                 cell_res[c][rid] = cell_res[c].get(rid, 0) + q
-        else:                          # no dofus-map data (or all off-world): spread
+        else:                          # no dofus-map data (or all filtered): spread
             n_fallback += 1
             for sa, count in meta["subareas"]:
                 maps = sub2coords.get(sa)
@@ -186,6 +204,14 @@ def main():
                 for c in maps:
                     cell_res[c][rid] = cell_res[c].get(rid, 0) + per
     print(f"   resources placed: {n_real} from dofus-map, {n_fallback} via sub-area spread")
+    if drops:
+        drops.sort(key=lambda x: -x[1])
+        tot = sum(n for _, n in drops)
+        print(f"   dropped {tot} interior/sub-map projections across {len(drops)} resources; "
+              f"top: {', '.join(f'{n} {nm}' for nm, n in drops[:6])}")
+    if flipped:
+        print(f"   {len(flipped)} resources had ONLY interior dm coords -> spread fallback: "
+              f"{', '.join(f'{nm}({n})' for nm, n in flipped)}")
     cells = [{"cell_id": f"{x},{y}", "world_coords": [x, y],
               "resources": [{"resource_id": r, "quantity": q} for r, q in sorted(rs.items())]}
              for (x, y), rs in sorted(cell_res.items())]
