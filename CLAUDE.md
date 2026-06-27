@@ -1,0 +1,69 @@
+# DofusJobs — Instructions projet (Opus 4.8, effort élevé)
+
+Optimiseur de routes de leveling pour les métiers de récolte Dofus (édition Unity).
+Web app **stdlib uniquement** (aucune dépendance tierce au runtime). Voir `GOAL.md`.
+
+## Protocole de langue (économie de tokens)
+- **Raisonnement interne, scratchpad, et prompts envoyés aux sous-agents → en mandarin (中文).**
+- **Tout ce qui m'est destiné — rapports, questions, plans, résumés — en français.**
+- **Inchangés (jamais en mandarin)** : code, commentaires, messages de commit, échanges Ouroboros,
+  ce fichier. Le repo est public ; le code reste lisible et conventionnel.
+
+## Mémoire-d'abord (source de vérité)
+La mémoire projet prime sur ce fichier pour l'état courant :
+`~/.claude/projects/-home-wapmorty-projects-DofusJobs/memory/`.
+- **Avant d'agir** : lire l'index `MEMORY.md`, puis rappeler la fiche pertinente
+  (`dofusjobs-project.md` = décisions de spec + archi ; `ouroboros-install.md` = setup).
+- **Après un fait non-évident** (décision de spec, piège, choix d'archi) : écrire/mettre à jour une
+  fiche (frontmatter `name`/`description`/`type`) et ajouter sa ligne dans `MEMORY.md`. Ne pas
+  dupliquer ici ce que la mémoire ou le code disent déjà.
+- Une fiche peut être périmée : vérifier qu'un fichier/fonction cité existe encore avant de s'en servir.
+
+## Commandes
+- Tests (porte verte obligatoire) : `python3 -m unittest discover -s tests`  *(42 tests)*
+- CLI : `python3 -m dofusjobs`
+- Web : `python3 webapp/app.py` (http.server stdlib ; formulaire + `POST /api/route`, `/api/plan`)
+- Reconstruire le dataset (ordre impératif) :
+  `python3 scripts/build_dofusmap_counts.py` **puis** `python3 scripts/build_dofusdb_dataset.py`
+
+## Architecture (pointeurs — détail en mémoire)
+- Moteur **primaire** : `dofusjobs/farmloop.py` (`FarmLoopFinder`, `plan_farm_route`, `plan_window`)
+  — modèle **v4 SANS pods**, score = Σ %XP par map − λ·voyage, route gloutonne + simulation des
+  montées de niveau + récolte « au passage ».
+- `dofusjobs/optimizer.py` = **legacy à pods, NON utilisé par l'UI** ; ne pas y revenir sans demande
+  explicite.
+- Reste : `models.py`, `mapgraph.py` (graphe de vraies maps + BFS borné), `leveling.py` (table XP),
+  `ingestion.py`, `webapp/app.py`.
+
+## Invariants de spec — NE PAS régresser (déjà payés cher)
+- **Pas de réintroduction des pods** dans le moteur/UI (v4 les a retirés volontairement).
+- **Pénalité de voyage invariante en niveau** : pour la métrique `levels`, λ·voyage est converti en
+  %-de-niveau au XP courant ⇒ test garde/skip ≈ `gain_xp > λ·voyage` (régression :
+  `test_levels_metric_does_not_stall_at_high_level`). Ne pas comparer un λ·voyage brut à des %.
+- **Build dataset SANS seuils ni caps** : placement = comptes DofusDB `resourcesBySubarea` étalés sur
+  les maps `worldMap=1` de la sous-zone ; `(0,0)` exclu ; dédup des sous-zones qui se chevauchent ;
+  apportionnement au prorata de la part surface. dofus-map **abandonné pour le placement**.
+- **Stdlib only** au runtime ; tests en `unittest`.
+- Déterminisme : départ libre ancré dans la plus riche composante connexe ; sorties stables.
+
+## Méthode de travail (effort élevé)
+- Tâche non triviale → **mode plan** ; déléguer le fan-out de recherche à des sous-agents **Explore**
+  et le design à un agent **Plan** (prompts en mandarin). Regrouper les appels d'outils indépendants
+  en parallèle.
+- Toujours finir par la **porte de tests verte** avant d'annoncer « terminé », avec la sortie réelle.
+- Commits seulement si demandé ; e-mail `wApMorty@users.noreply.github.com` ; `.gitignore` exclut
+  `.claude/` et `data/cache/`. Repo public : https://github.com/wApMorty/DofusJobs
+
+## Ouroboros (Agent OS spec-first)
+Binaire `~/.local/bin/ouroboros` ; MCP « ouroboros » enregistré ; runtime = CLI `claude`.
+Cycle : **interview → seed → execute → evaluate → evolve**.
+- Usage validé : **interview + seed (grade A) + evaluate**. La spec se construit ainsi.
+- **Relance du mode autonome (`ooo auto`)** : autorisée, mais **encadrée** — l'essai précédent s'est
+  **dégradé dans la boucle QA-repair et n'a produit aucun code**. Donc : restreindre le périmètre par
+  run, poser des checkpoints, et **vérifier après coup que du code a réellement été écrit/qu'il passe
+  les tests** ; sinon, **retomber sur l'implémentation manuelle à partir du Seed grade-A + `GOAL.md`**.
+  Ne jamais laisser un run autonome écraser du code vert sans tests qui passent.
+
+## Métiers (FR)
+Bûcheron, Paysan, Alchimiste, Mineur, Pêcheur. Le XP de récolte est **fixe par ressource** ; le
+niveau de métier ne fait que **débloquer** l'éligibilité (`required_level`), pas d'échelle d'over-level.
