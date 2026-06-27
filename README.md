@@ -74,7 +74,7 @@ map proche ne vaille le trajet. Déterministe (score, trajet, identifiants).
 
 ```bash
 cd DofusJobs
-python3 -m unittest discover -s tests   # 46 tests
+python3 -m unittest discover -s tests   # 39 tests
 ```
 
 ## Données
