@@ -133,18 +133,29 @@ def main():
         # placement, but its groupId=0 merges every worldmap and projects interior
         # spawns onto the surface entrance coord — inflated and unreliable, so the
         # real surface signal is DofusDB's worldMap=1 sub-area count, no thresholds.)
+        # A surface coord can sit in several overlapping sub-areas (a mine entrance
+        # is both on the mountain and in the mine zone). Give the resource to each
+        # coord from only ONE of its sub-areas (dedup) so it isn't summed into a
+        # fake hub (e.g. iron at the Mine Istairameur entrance).
         placed = False
-        for sa, count in meta["subareas"]:
+        seen = set()
+        for sa, count in sorted(meta["subareas"]):
             maps = sub2coords.get(sa)
             if not maps or count <= 0:
                 continue
             maps = sorted(maps)
+            # density = count over ALL of the sub-area's maps (low), but only place
+            # on coords not already given this resource by an earlier sub-area —
+            # the overlap share is dropped, not piled up into a hub.
             base, extra = divmod(count, len(maps))
             for i, c in enumerate(maps):
+                if c in seen:
+                    continue
                 q = base + (1 if i < extra else 0)
                 if q:
                     cell_res[c][rid] = cell_res[c].get(rid, 0) + q
-            placed = True
+                    placed = True
+            seen.update(maps)
         n_placed += placed
         n_absent += not placed
     print(f"   resources on the surface: {n_placed}; off-surface only (interior/other worldmap): {n_absent}")
