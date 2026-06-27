@@ -109,7 +109,8 @@ python3 -m webapp.app --port 8000          # http://127.0.0.1:8000
 Affiche le chemin ordonné (maps), des **instructions de déplacement lisibles**
 (`→×2 ↑` au lieu de coords brutes — le vrai chemin BFS entre deux stops,
 ordre préservé), l'XP totale et par métier, les pods, le coût de déplacement, **les
-level-ups en cours de passe** (et ce qu'ils débloquent).
+level-ups en cours de passe** (et ce qu'ils débloquent). **Clic sur une coordonnée**
+= copie la commande `/travel x y` dans le presse-papier (autopilote en jeu).
 
 ### Ligne de commande
 

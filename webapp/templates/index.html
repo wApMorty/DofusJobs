@@ -31,6 +31,9 @@
   th,td { text-align:left; padding:7px 8px; border-bottom:1px solid #2f3640; }
   th { color:var(--mut); font-weight:600; }
   .stop { color:var(--acc); font-weight:600; }
+  .coord { cursor:pointer; color:var(--acc); font-weight:600; border-bottom:1px dashed var(--acc); white-space:nowrap; }
+  .coord:hover { background:#1f3a44; }
+  .coord.copied { color:#8fd3e8; border-bottom-color:transparent; }
   .badge { display:inline-block; background:#2f3640; border-radius:5px; padding:1px 7px; margin:1px; font-size:12px; }
   .dir { display:inline-block; background:#1f3a44; color:#8fd3e8; border-radius:5px; padding:1px 7px; margin:1px; font-size:12px; white-space:nowrap; }
   .empty { color:var(--mut); }
@@ -78,6 +81,33 @@
 const JOBS = Array.from(document.querySelectorAll('[name^=lvl_]')).map(i => i.name.slice(4));
 const form = document.getElementById('form');
 const resultEl = document.getElementById('result');
+
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text); return true;
+    }
+  } catch (e) { /* fall through to legacy path */ }
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) {}
+  document.body.removeChild(ta);
+  return ok;
+}
+
+// Click a coordinate to copy its in-game "/travel x y" command (event
+// delegation: the result table is re-rendered on every search).
+resultEl.addEventListener('click', async (e) => {
+  const el = e.target.closest('.coord');
+  if (!el || el.classList.contains('copied')) return;
+  const ok = await copyText(el.dataset.cmd);
+  const original = el.textContent;
+  el.classList.add('copied');
+  el.textContent = ok ? '✓ copié' : '⚠ Ctrl+C';
+  setTimeout(() => { el.textContent = original; el.classList.remove('copied'); }, 900);
+});
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -133,9 +163,10 @@ function render(d) {
     const move = i===0
       ? '<span class="empty">départ</span>'
       : `${dirs || '<span class="empty">sur place</span>'} <small>(${s.travel_cost_from_prev} écran${s.travel_cost_from_prev>1?'s':''})</small>`;
+    const [cx, cy] = s.world_coords;
     rows += `<tr>
       <td>${i}</td>
-      <td class="stop">[${s.world_coords.join(', ')}]</td>
+      <td><span class="coord" data-cmd="/travel ${cx} ${cy}" title="Cliquer pour copier « /travel ${cx} ${cy} »">[${cx}, ${cy}]</span></td>
       <td>${move}</td>
       <td>${s.stop_xp}</td>
       <td>${acts}</td></tr>`;
@@ -147,6 +178,7 @@ function render(d) {
   resultEl.innerHTML = `
     ${metrics}
     <div style="margin-bottom:10px">Détail par métier : ${byJob}</div>
+    <div class="hint" style="margin-bottom:6px">💡 Clique sur une coordonnée pour copier la commande <code>/travel x y</code> (autopilote en jeu).</div>
     <table>
       <thead><tr><th>#</th><th>Coords</th><th>Déplacement</th><th>XP</th><th>Récoltes</th></tr></thead>
       <tbody>${rows}</tbody>
