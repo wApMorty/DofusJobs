@@ -1,0 +1,14 @@
+{
+  "_meta": {
+    "description": "Cumulative gathering-job XP required to START each level (same curve for all jobs). Gathering jobs cap at level 200.",
+    "source": "Dofus Pour Les Noobs job-XP curve: each level costs 20 more XP than the previous (arithmetic), i.e. cost(L->L+1) = 20*L, giving a closed-form cumulative. Reproduces the observed cumulative level-200 = 398000.",
+    "model": "cumulative(N) = coefficient * N * (N-1), with coefficient = 10. Exact for every level 1..200, no interpolation. cumulative(1)=0, cumulative(10)=900, cumulative(100)=99000, cumulative(200)=398000.",
+    "note": "This conflicts ~6x with the Wiki Dofus table (which gave 581687 at level 100) — kept this one per the player's direct reading. To switch curves, replace 'formula' with an 'anchors' object {level: cumulative_xp} (linear interpolation between anchors is then used)."
+  },
+  "formula": {
+    "model": "triangular",
+    "coefficient": 10,
+    "max_level": 200,
+    "cumulative": "coefficient * L * (L - 1)"
+  }
+}

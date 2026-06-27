@@ -1,0 +1,769 @@
+{
+"resources": [
+{
+"resource_id": "ble",
+"name": "Blé",
+"job": "farmer",
+"required_level": 1,
+"resource_level": 1,
+"pods": 2,
+"base_xp": 7
+},
+{
+"resource_id": "orge",
+"name": "Orge",
+"job": "farmer",
+"required_level": 20,
+"resource_level": 20,
+"pods": 2,
+"base_xp": 14
+},
+{
+"resource_id": "houblon",
+"name": "Houblon",
+"job": "farmer",
+"required_level": 60,
+"resource_level": 60,
+"pods": 2,
+"base_xp": 29
+},
+{
+"resource_id": "malt",
+"name": "Malt",
+"job": "farmer",
+"required_level": 120,
+"resource_level": 120,
+"pods": 2,
+"base_xp": 50
+},
+{
+"resource_id": "lin",
+"name": "Lin",
+"job": "farmer",
+"required_level": 80,
+"resource_level": 80,
+"pods": 2,
+"base_xp": 36
+},
+{
+"resource_id": "chanvre",
+"name": "Chanvre",
+"job": "farmer",
+"required_level": 140,
+"resource_level": 140,
+"pods": 2,
+"base_xp": 57
+},
+{
+"resource_id": "seigle",
+"name": "Seigle",
+"job": "farmer",
+"required_level": 100,
+"resource_level": 100,
+"pods": 2,
+"base_xp": 43
+},
+{
+"resource_id": "avoine",
+"name": "Avoine",
+"job": "farmer",
+"required_level": 40,
+"resource_level": 40,
+"pods": 2,
+"base_xp": 21
+},
+{
+"resource_id": "riz",
+"name": "Riz",
+"job": "farmer",
+"required_level": 100,
+"resource_level": 100,
+"pods": 2,
+"base_xp": 43
+},
+{
+"resource_id": "frostiz",
+"name": "Frostiz",
+"job": "farmer",
+"required_level": 200,
+"resource_level": 200,
+"pods": 2,
+"base_xp": 79
+},
+{
+"resource_id": "mais",
+"name": "Maïs",
+"job": "farmer",
+"required_level": 160,
+"resource_level": 160,
+"pods": 2,
+"base_xp": 65
+},
+{
+"resource_id": "millet",
+"name": "Millet",
+"job": "farmer",
+"required_level": 180,
+"resource_level": 180,
+"pods": 2,
+"base_xp": 72
+},
+{
+"resource_id": "quisnoa",
+"name": "Quisnoa",
+"job": "farmer",
+"required_level": 200,
+"resource_level": 200,
+"pods": 2,
+"base_xp": 79
+},
+{
+"resource_id": "orchidee_freyesque",
+"name": "Orchidée Freyesque",
+"job": "herbalist",
+"required_level": 80,
+"resource_level": 80,
+"pods": 1,
+"base_xp": 36
+},
+{
+"resource_id": "edelweiss",
+"name": "Edelweiss",
+"job": "herbalist",
+"required_level": 100,
+"resource_level": 100,
+"pods": 1,
+"base_xp": 43
+},
+{
+"resource_id": "perce_neige",
+"name": "Perce-Neige",
+"job": "herbalist",
+"required_level": 200,
+"resource_level": 200,
+"pods": 1,
+"base_xp": 79
+},
+{
+"resource_id": "belladone",
+"name": "Belladone",
+"job": "herbalist",
+"required_level": 160,
+"resource_level": 160,
+"pods": 1,
+"base_xp": 65
+},
+{
+"resource_id": "tulipe_en_papier",
+"name": "Tulipe en papier",
+"job": "herbalist",
+"required_level": 200,
+"resource_level": 200,
+"pods": 1,
+"base_xp": 79
+},
+{
+"resource_id": "menthe_sauvage",
+"name": "Menthe Sauvage",
+"job": "herbalist",
+"required_level": 60,
+"resource_level": 60,
+"pods": 1,
+"base_xp": 29
+},
+{
+"resource_id": "trefle_a_5_feuilles",
+"name": "Trèfle à 5 feuilles",
+"job": "herbalist",
+"required_level": 40,
+"resource_level": 40,
+"pods": 1,
+"base_xp": 21
+},
+{
+"resource_id": "ortie",
+"name": "Ortie",
+"job": "herbalist",
+"required_level": 1,
+"resource_level": 1,
+"pods": 1,
+"base_xp": 7
+},
+{
+"resource_id": "sauge",
+"name": "Sauge",
+"job": "herbalist",
+"required_level": 20,
+"resource_level": 20,
+"pods": 1,
+"base_xp": 14
+},
+{
+"resource_id": "ginseng",
+"name": "Ginseng",
+"job": "herbalist",
+"required_level": 140,
+"resource_level": 140,
+"pods": 1,
+"base_xp": 57
+},
+{
+"resource_id": "mandragore",
+"name": "Mandragore",
+"job": "herbalist",
+"required_level": 180,
+"resource_level": 180,
+"pods": 1,
+"base_xp": 72
+},
+{
+"resource_id": "salikrone",
+"name": "Salikrone",
+"job": "herbalist",
+"required_level": 200,
+"resource_level": 200,
+"pods": 1,
+"base_xp": 79
+},
+{
+"resource_id": "bois_de_frene",
+"name": "Bois de Frêne",
+"job": "lumberjack",
+"required_level": 1,
+"resource_level": 1,
+"pods": 5,
+"base_xp": 7
+},
+{
+"resource_id": "bois_d_ebene",
+"name": "Bois d'Ébène",
+"job": "lumberjack",
+"required_level": 140,
+"resource_level": 140,
+"pods": 5,
+"base_xp": 57
+},
+{
+"resource_id": "bois_de_chene",
+"name": "Bois de Chêne",
+"job": "lumberjack",
+"required_level": 60,
+"resource_level": 60,
+"pods": 5,
+"base_xp": 29
+},
+{
+"resource_id": "bois_d_if",
+"name": "Bois d'If",
+"job": "lumberjack",
+"required_level": 100,
+"resource_level": 100,
+"pods": 5,
+"base_xp": 43
+},
+{
+"resource_id": "bois_d_orme",
+"name": "Bois d'Orme",
+"job": "lumberjack",
+"required_level": 180,
+"resource_level": 180,
+"pods": 5,
+"base_xp": 72
+},
+{
+"resource_id": "bois_d_erable",
+"name": "Bois d'Érable",
+"job": "lumberjack",
+"required_level": 80,
+"resource_level": 80,
+"pods": 5,
+"base_xp": 36
+},
+{
+"resource_id": "bois_de_charme",
+"name": "Bois de Charme",
+"job": "lumberjack",
+"required_level": 160,
+"resource_level": 160,
+"pods": 5,
+"base_xp": 65
+},
+{
+"resource_id": "bois_de_chataignier",
+"name": "Bois de Châtaignier",
+"job": "lumberjack",
+"required_level": 20,
+"resource_level": 20,
+"pods": 5,
+"base_xp": 14
+},
+{
+"resource_id": "bois_de_merisier",
+"name": "Bois de Merisier",
+"job": "lumberjack",
+"required_level": 120,
+"resource_level": 120,
+"pods": 5,
+"base_xp": 50
+},
+{
+"resource_id": "bois_de_noyer",
+"name": "Bois de Noyer",
+"job": "lumberjack",
+"required_level": 40,
+"resource_level": 40,
+"pods": 5,
+"base_xp": 21
+},
+{
+"resource_id": "bois_d_oliviolet",
+"name": "Bois d'Oliviolet",
+"job": "lumberjack",
+"required_level": 90,
+"resource_level": 90,
+"pods": 5,
+"base_xp": 39
+},
+{
+"resource_id": "bois_de_bombu",
+"name": "Bois de Bombu",
+"job": "lumberjack",
+"required_level": 70,
+"resource_level": 70,
+"pods": 5,
+"base_xp": 32
+},
+{
+"resource_id": "bois_de_bambou",
+"name": "Bois de Bambou",
+"job": "lumberjack",
+"required_level": 110,
+"resource_level": 110,
+"pods": 5,
+"base_xp": 47
+},
+{
+"resource_id": "bois_de_bambou_sacre",
+"name": "Bois de Bambou Sacré",
+"job": "lumberjack",
+"required_level": 190,
+"resource_level": 190,
+"pods": 5,
+"base_xp": 75
+},
+{
+"resource_id": "bois_de_bambou_sombre",
+"name": "Bois de Bambou Sombre",
+"job": "lumberjack",
+"required_level": 170,
+"resource_level": 170,
+"pods": 5,
+"base_xp": 68
+},
+{
+"resource_id": "bois_de_kaliptus",
+"name": "Bois de Kaliptus",
+"job": "lumberjack",
+"required_level": 150,
+"resource_level": 150,
+"pods": 5,
+"base_xp": 61
+},
+{
+"resource_id": "bois_de_tremble",
+"name": "Bois de Tremble",
+"job": "lumberjack",
+"required_level": 200,
+"resource_level": 200,
+"pods": 5,
+"base_xp": 79
+},
+{
+"resource_id": "bois_de_noisetier",
+"name": "Bois de Noisetier",
+"job": "lumberjack",
+"required_level": 130,
+"resource_level": 130,
+"pods": 5,
+"base_xp": 54
+},
+{
+"resource_id": "bois_d_aquajou",
+"name": "Bois d'Aquajou",
+"job": "lumberjack",
+"required_level": 200,
+"resource_level": 200,
+"pods": 5,
+"base_xp": 79
+},
+{
+"resource_id": "bois_de_pin",
+"name": "Bois de Pin",
+"job": "lumberjack",
+"required_level": 90,
+"resource_level": 90,
+"pods": 5,
+"base_xp": 39
+},
+{
+"resource_id": "fer",
+"name": "Fer",
+"job": "miner",
+"required_level": 1,
+"resource_level": 1,
+"pods": 5,
+"base_xp": 7
+},
+{
+"resource_id": "or",
+"name": "Or",
+"job": "miner",
+"required_level": 160,
+"resource_level": 160,
+"pods": 5,
+"base_xp": 65
+},
+{
+"resource_id": "argent",
+"name": "Argent",
+"job": "miner",
+"required_level": 120,
+"resource_level": 120,
+"pods": 5,
+"base_xp": 50
+},
+{
+"resource_id": "cuivre",
+"name": "Cuivre",
+"job": "miner",
+"required_level": 20,
+"resource_level": 20,
+"pods": 5,
+"base_xp": 14
+},
+{
+"resource_id": "bronze",
+"name": "Bronze",
+"job": "miner",
+"required_level": 40,
+"resource_level": 40,
+"pods": 5,
+"base_xp": 21
+},
+{
+"resource_id": "kobalte",
+"name": "Kobalte",
+"job": "miner",
+"required_level": 60,
+"resource_level": 60,
+"pods": 5,
+"base_xp": 29
+},
+{
+"resource_id": "etain",
+"name": "Étain",
+"job": "miner",
+"required_level": 100,
+"resource_level": 100,
+"pods": 5,
+"base_xp": 43
+},
+{
+"resource_id": "manganese",
+"name": "Manganèse",
+"job": "miner",
+"required_level": 80,
+"resource_level": 80,
+"pods": 5,
+"base_xp": 36
+},
+{
+"resource_id": "bauxite",
+"name": "Bauxite",
+"job": "miner",
+"required_level": 140,
+"resource_level": 140,
+"pods": 5,
+"base_xp": 57
+},
+{
+"resource_id": "silicate",
+"name": "Silicate",
+"job": "miner",
+"required_level": 100,
+"resource_level": 100,
+"pods": 5,
+"base_xp": 43
+},
+{
+"resource_id": "dolomite",
+"name": "Dolomite",
+"job": "miner",
+"required_level": 180,
+"resource_level": 180,
+"pods": 5,
+"base_xp": 72
+},
+{
+"resource_id": "obsidienne",
+"name": "Obsidienne",
+"job": "miner",
+"required_level": 200,
+"resource_level": 200,
+"pods": 5,
+"base_xp": 79
+},
+{
+"resource_id": "ecume_de_mer",
+"name": "Écume de mer",
+"job": "miner",
+"required_level": 200,
+"resource_level": 200,
+"pods": 5,
+"base_xp": 79
+},
+{
+"resource_id": "cristal_liquide",
+"name": "Cristal liquide",
+"job": "miner",
+"required_level": 200,
+"resource_level": 200,
+"pods": 5,
+"base_xp": 79
+},
+{
+"resource_id": "cristal_pliable",
+"name": "Cristal pliable",
+"job": "miner",
+"required_level": 200,
+"resource_level": 200,
+"pods": 5,
+"base_xp": 79
+},
+{
+"resource_id": "cendrepierre",
+"name": "Cendrepierre",
+"job": "miner",
+"required_level": 180,
+"resource_level": 180,
+"pods": 5,
+"base_xp": 72
+},
+{
+"resource_id": "greuvette",
+"name": "Greuvette",
+"job": "fisherman",
+"required_level": 10,
+"resource_level": 10,
+"pods": 2,
+"base_xp": 11
+},
+{
+"resource_id": "kralamoure",
+"name": "Kralamoure",
+"job": "fisherman",
+"required_level": 90,
+"resource_level": 90,
+"pods": 2,
+"base_xp": 39
+},
+{
+"resource_id": "requin_marteau_faucille",
+"name": "Requin Marteau-Faucille",
+"job": "fisherman",
+"required_level": 150,
+"resource_level": 150,
+"pods": 2,
+"base_xp": 61
+},
+{
+"resource_id": "poisson_chaton",
+"name": "Poisson-Chaton",
+"job": "fisherman",
+"required_level": 40,
+"resource_level": 40,
+"pods": 2,
+"base_xp": 21
+},
+{
+"resource_id": "poisson_pane",
+"name": "Poisson Pané",
+"job": "fisherman",
+"required_level": 50,
+"resource_level": 50,
+"pods": 2,
+"base_xp": 25
+},
+{
+"resource_id": "crabe_sourimi",
+"name": "Crabe Sourimi",
+"job": "fisherman",
+"required_level": 30,
+"resource_level": 30,
+"pods": 2,
+"base_xp": 18
+},
+{
+"resource_id": "bar_rikain",
+"name": "Bar Rikain",
+"job": "fisherman",
+"required_level": 160,
+"resource_level": 160,
+"pods": 2,
+"base_xp": 65
+},
+{
+"resource_id": "goujon",
+"name": "Goujon",
+"job": "fisherman",
+"required_level": 1,
+"resource_level": 1,
+"pods": 2,
+"base_xp": 7
+},
+{
+"resource_id": "raie_bleue",
+"name": "Raie Bleue",
+"job": "fisherman",
+"required_level": 130,
+"resource_level": 130,
+"pods": 2,
+"base_xp": 54
+},
+{
+"resource_id": "carpe_d_iem",
+"name": "Carpe d'Iem",
+"job": "fisherman",
+"required_level": 60,
+"resource_level": 60,
+"pods": 2,
+"base_xp": 29
+},
+{
+"resource_id": "perche",
+"name": "Perche",
+"job": "fisherman",
+"required_level": 120,
+"resource_level": 120,
+"pods": 2,
+"base_xp": 50
+},
+{
+"resource_id": "sardine_brillante",
+"name": "Sardine Brillante",
+"job": "fisherman",
+"required_level": 70,
+"resource_level": 70,
+"pods": 2,
+"base_xp": 32
+},
+{
+"resource_id": "truite",
+"name": "Truite",
+"job": "fisherman",
+"required_level": 20,
+"resource_level": 20,
+"pods": 2,
+"base_xp": 14
+},
+{
+"resource_id": "brochet",
+"name": "Brochet",
+"job": "fisherman",
+"required_level": 80,
+"resource_level": 80,
+"pods": 2,
+"base_xp": 36
+},
+{
+"resource_id": "poisskaille",
+"name": "Poisskaille",
+"job": "fisherman",
+"required_level": 200,
+"resource_level": 200,
+"pods": 2,
+"base_xp": 79
+},
+{
+"resource_id": "pichon_magique",
+"name": "Pichon Magique",
+"job": "fisherman",
+"required_level": 120,
+"resource_level": 120,
+"pods": 2,
+"base_xp": 50
+},
+{
+"resource_id": "anguille",
+"name": "Anguille",
+"job": "fisherman",
+"required_level": 100,
+"resource_level": 100,
+"pods": 2,
+"base_xp": 43
+},
+{
+"resource_id": "dorade_grise",
+"name": "Dorade Grise",
+"job": "fisherman",
+"required_level": 110,
+"resource_level": 110,
+"pods": 2,
+"base_xp": 47
+},
+{
+"resource_id": "lotte",
+"name": "Lotte",
+"job": "fisherman",
+"required_level": 140,
+"resource_level": 140,
+"pods": 2,
+"base_xp": 57
+},
+{
+"resource_id": "morue",
+"name": "Morue",
+"job": "fisherman",
+"required_level": 170,
+"resource_level": 170,
+"pods": 2,
+"base_xp": 68
+},
+{
+"resource_id": "tanche",
+"name": "Tanche",
+"job": "fisherman",
+"required_level": 180,
+"resource_level": 180,
+"pods": 2,
+"base_xp": 72
+},
+{
+"resource_id": "espadon",
+"name": "Espadon",
+"job": "fisherman",
+"required_level": 190,
+"resource_level": 190,
+"pods": 2,
+"base_xp": 75
+},
+{
+"resource_id": "patelle",
+"name": "Patelle",
+"job": "fisherman",
+"required_level": 200,
+"resource_level": 200,
+"pods": 2,
+"base_xp": 79
+},
+{
+"resource_id": "pichon_d_encre",
+"name": "Pichon d'encre",
+"job": "fisherman",
+"required_level": 200,
+"resource_level": 200,
+"pods": 2,
+"base_xp": 79
+}
+]
+}

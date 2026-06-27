@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DofusJobs — Optimiseur de leveling récolte</title>
+<style>
+  :root { --bg:#1b1f24; --card:#252b33; --acc:#6cc070; --txt:#e6e6e6; --mut:#9aa4af; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--txt); }
+  header { padding:18px 24px; border-bottom:1px solid #333; }
+  h1 { margin:0; font-size:20px; } h1 span { color:var(--acc); }
+  .sub { color:var(--mut); font-size:13px; margin-top:4px; }
+  main { display:grid; grid-template-columns:340px 1fr; gap:20px; padding:20px 24px; }
+  @media (max-width:820px){ main{ grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid #333; border-radius:10px; padding:16px; }
+  .jobrow { display:flex; justify-content:space-between; align-items:center; margin:8px 0; }
+  .jobrow label { color:var(--mut); }
+  input[type=number]{ width:90px; padding:6px 8px; background:#1b1f24; border:1px solid #3a424c; border-radius:6px; color:var(--txt); }
+  .field { margin:12px 0; }
+  .field label { display:block; color:var(--mut); font-size:13px; margin-bottom:4px; }
+  .field input[type=number]{ width:100%; }
+  .hint { color:var(--mut); font-size:12px; margin-top:3px; }
+  button { width:100%; margin-top:14px; padding:11px; background:var(--acc); color:#10210f; border:0; border-radius:8px; font-weight:700; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:wait; }
+  .check { display:flex; align-items:center; gap:8px; margin-top:10px; color:var(--mut); font-size:13px; }
+  .metrics { display:flex; flex-wrap:wrap; gap:14px; margin-bottom:14px; }
+  .metric { background:#1b1f24; border:1px solid #333; border-radius:8px; padding:10px 14px; min-width:120px; }
+  .metric .k { color:var(--mut); font-size:12px; } .metric .v { font-size:20px; font-weight:700; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th,td { text-align:left; padding:7px 8px; border-bottom:1px solid #2f3640; }
+  th { color:var(--mut); font-weight:600; }
+  .stop { color:var(--acc); font-weight:600; }
+  .badge { display:inline-block; background:#2f3640; border-radius:5px; padding:1px 7px; margin:1px; font-size:12px; }
+  .dir { display:inline-block; background:#1f3a44; color:#8fd3e8; border-radius:5px; padding:1px 7px; margin:1px; font-size:12px; white-space:nowrap; }
+  .empty { color:var(--mut); }
+  .reason { color:#d8b14a; font-size:13px; margin-top:8px; }
+  .lvlup { color:#6cc070; font-size:13px; font-style:italic; }
+  small { color:var(--mut); }
+  code { background:#1b1f24; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span>DofusJobs</span> — optimiseur de leveling récolte</h1>
+  <div class="sub">Saisis tes niveaux par métier et ta limite de pods. L'optimiseur calcule une passe maximisant l'XP sous contrainte de pods, en pénalisant les déplacements. <b>Départ libre</b> (le moteur choisit le meilleur point), et <b>simulation des paliers</b> : si tu débloques un palier en cours de run, le chemin s'adapte.</div>
+</header>
+<main>
+  <form id="form" class="card">
+    <h3 style="margin-top:0">Tes niveaux de métier</h3>
+    {{JOB_ROWS}}
+    <div class="field">
+      <label>Limite de pods</label>
+      <input type="number" min="1" name="pods_limit" value="1000">
+    </div>
+    <div class="field">
+      <label>Objectif</label>
+      <select name="metric" id="metric">
+        <option value="levels">Par niveau — % de level (équilibre les métiers)</option>
+        <option value="xp">Par XP brut (maximise l'XP totale)</option>
+      </select>
+      <div class="hint">« Par niveau » privilégie les métiers qui montent vite : un haut niveau rapporte peu de % de level. Idéal pour monter tout en parallèle.</div>
+    </div>
+    <div class="field">
+      <label>λ — poids du déplacement (par écran de map)</label>
+      <input type="number" min="0" step="0.5" name="lambda_travel" value="2">
+      <div class="hint">0 = ignore le trajet. Unité = celle de l'objectif (XP/écran ou %-level/écran).</div>
+    </div>
+    <button type="submit" id="go">Calculer le chemin optimisé</button>
+  </form>
+
+  <section id="result" class="card">
+    <div class="empty">Le chemin optimisé s'affichera ici.</div>
+  </section>
+</main>
+
+<script>
+const JOBS = Array.from(document.querySelectorAll('[name^=lvl_]')).map(i => i.name.slice(4));
+const form = document.getElementById('form');
+const resultEl = document.getElementById('result');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('go');
+  btn.disabled = true; btn.textContent = 'Calcul…';
+  const job_levels = {};
+  JOBS.forEach(j => job_levels[j] = Number(form.querySelector(`[name=lvl_${j}]`).value || 0));
+  const payload = {
+    job_levels,
+    pods_limit: Number(form.pods_limit.value || 0),
+    lambda_travel: Number(form.lambda_travel.value || 0),
+    metric: document.getElementById('metric').value,
+  };
+  try {
+    const r = await fetch('/api/route', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'erreur');
+    render(data);
+  } catch (err) {
+    resultEl.innerHTML = `<div class="reason">Erreur : ${err.message}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Calculer le chemin optimisé';
+  }
+});
+
+function render(d) {
+  const labels = d.job_labels || {};
+  const metrics = `
+    <div class="metrics">
+      <div class="metric"><div class="k">Niveaux gagnés</div><div class="v">+${(d.total_levels_gained||0).toFixed(2)}</div></div>
+      <div class="metric"><div class="k">XP totale</div><div class="v">${d.total_xp}</div></div>
+      <div class="metric"><div class="k">Déplacement</div><div class="v">${d.total_travel_cost}</div></div>
+      <div class="metric"><div class="k">Pods</div><div class="v">${d.pods_used}/${d.pods_limit}</div></div>
+      <div class="metric"><div class="k">Objectif</div><div class="v" style="font-size:15px">${d.metric==='levels'?'niveau %':'XP brut'}</div></div>
+    </div>`;
+  const byJob = Object.entries(d.xp_by_job || {}).map(([j,v]) => {
+    const sl = (d.start_levels||{})[j], el = (d.end_levels||{})[j];
+    const lg = (d.levels_gained||{})[j];
+    const lvl = (lg!==undefined) ? ` <small>(${sl}→${el}, +${lg.toFixed(2)} lvl)</small>` : '';
+    return `<span class="badge">${labels[j]||j}: ${v} XP${lvl}</span>`;
+  }).join(' ') || '<span class="empty">—</span>';
+
+  const lupByStop = {};
+  (d.level_ups||[]).forEach(lu => { (lupByStop[lu.at_stop_index] ||= []).push(lu); });
+
+  let rows = '';
+  d.route.forEach((s, i) => {
+    const harv = {};
+    s.harvests.forEach(h => { harv[h.resource_name] = (harv[h.resource_name]||0)+1; });
+    const acts = Object.entries(harv).map(([n,c]) => `<span class="badge">${n} ×${c}</span>`).join(' ')
+                 || '<span class="empty">—</span>';
+    const dirs = (s.directions||[]).map(x => `<span class="dir">${x}</span>`).join(' ');
+    const move = i===0
+      ? '<span class="empty">départ</span>'
+      : `${dirs || '<span class="empty">sur place</span>'} <small>(${s.travel_cost_from_prev} écran${s.travel_cost_from_prev>1?'s':''})</small>`;
+    rows += `<tr>
+      <td>${i}</td>
+      <td class="stop">[${s.world_coords.join(', ')}]</td>
+      <td>${move}</td>
+      <td>${s.stop_xp}</td>
+      <td>${acts}</td></tr>`;
+    (lupByStop[i]||[]).forEach(lu => {
+      const unl = lu.unlocked && lu.unlocked.length ? ` → débloque <b>${lu.unlocked.join(', ')}</b>` : '';
+      rows += `<tr><td></td><td colspan="4" class="lvlup">⬆ ${labels[lu.job_id]||lu.job_id} ${lu.from_level}→${lu.to_level}${unl}</td></tr>`;
+    });
+  });
+  resultEl.innerHTML = `
+    ${metrics}
+    <div style="margin-bottom:10px">Détail par métier : ${byJob}</div>
+    <table>
+      <thead><tr><th>#</th><th>Coords</th><th>Déplacement</th><th>XP</th><th>Récoltes</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="reason">Fin de passe : <code>${d.terminated_reason}</code></div>`;
+}
+</script>
+</body>
+</html>
