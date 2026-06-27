@@ -22,14 +22,6 @@ from collections import defaultdict
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
 
-# dofus-map per-map counts are mostly realistic spot counts (median 1, p90 3),
-# with legitimately dense fields/forests/mines reaching ~26 (wheat), ~44 (iron).
-# A rarer aggregation tail collapses a whole water/mine network onto a few coords
-# (e.g. the 4 Astrub coords each carry ~100 of every fish). We keep counts RAW
-# (no cap) to preserve that real field density — a flat cap was destroying it
-# (wheat 26 -> 10). Trade-off: the optimizer may over-harvest those few
-# aggregation hubs in a single stop. Set to a positive int to re-enable a clip.
-PER_MAP_CAP = 0
 UA = {"User-Agent": "DofusJobs/1.0 (gathering-route optimizer; official API)"}
 
 TYPE_JOB = {34: "farmer", 35: "herbalist", 36: "herbalist", 38: "lumberjack",
@@ -149,6 +141,40 @@ def fetch_world_maps():
     return coords, sub2coords
 
 
+# Max harvest nodes that realistically fit on one map screen. Real dense fields
+# top out around here (wheat ~26); a higher per-map count means dofus-map is
+# aggregating a whole water/mine network onto a few "hub" coords (the 4 Astrub
+# coords carry ~100 of every fish). Above the ceiling the surplus is relocated
+# onto the hub's sub-area, NOT discarded -> total XP is conserved and the route
+# becomes a real multi-map tour instead of standing on one screen.
+HUB_MAP_CEIL = 30
+
+
+def redistribute(base, sa_maps, ceil):
+    """Spread per-map counts so no map exceeds ``ceil``, relocating any surplus
+    onto the other maps of the same sub-area. Conserves ``sum(base.values())``
+    (no XP lost), turning an aggregation hub into a multi-map tour. Deterministic
+    (sub-area maps filled in sorted order)."""
+    sa_maps = sorted(set(sa_maps) | set(base))
+    out = {c: min(base.get(c, 0), ceil) for c in sa_maps}
+    surplus = sum(base.values()) - sum(out.values())
+    while surplus > 0:
+        recipients = [c for c in sa_maps if out[c] < ceil]
+        if not recipients:                      # whole sub-area full: overflow
+            share, rem = divmod(surplus, len(sa_maps))
+            for i, c in enumerate(sa_maps):
+                out[c] += share + (1 if i < rem else 0)
+            break
+        share = max(1, surplus // len(recipients))
+        for c in recipients:
+            add = min(share, ceil - out[c], surplus)
+            out[c] += add
+            surplus -= add
+            if surplus <= 0:
+                break
+    return out
+
+
 def main():
     print("1) resources from DofusDB ...")
     resources = build_resources()
@@ -156,6 +182,7 @@ def main():
 
     print("2) world maps (worldMap=1) ...")
     coords, sub2coords = fetch_world_maps()
+    coord2sa = {c: sa for sa, cs in sub2coords.items() for c in cs}
     print(f"   main-world maps: {len(coords)}, sub-areas with maps: {len(sub2coords)}")
 
     print("3) building cells (dofus-map real per-map counts; sub-area spread fallback) ...")
@@ -164,6 +191,7 @@ def main():
         print(f"   dofus-map counts loaded for {len(dm_counts)} resources")
     cell_res = defaultdict(dict)   # (x,y) -> {rid: qty}
     n_real = n_fallback = 0
+    n_hubs = relocated = 0         # de-aggregation diagnostics
     drops = []                     # (name, n_dropped) for the interior-spawn diag
     flipped = []                   # had in-world dm coords but ALL filtered out
     for rid, meta in resources.items():
@@ -192,10 +220,21 @@ def main():
                 break
         if real:                       # at least one confirmed surface spawn
             n_real += 1
+            # De-aggregate hubs: group the resource's coords by sub-area and
+            # spread each sub-area's surplus (count above HUB_MAP_CEIL) over that
+            # sub-area's maps. Total per sub-area is conserved (no XP lost), but a
+            # collapsed network (e.g. Astrub fish) becomes a real tour.
+            by_sa = defaultdict(dict)
             for c, q in real.items():
-                if PER_MAP_CAP:
-                    q = min(q, PER_MAP_CAP)
-                cell_res[c][rid] = cell_res[c].get(rid, 0) + q
+                by_sa[coord2sa.get(c)][c] = q
+            for sa, base in by_sa.items():
+                if max(base.values()) > HUB_MAP_CEIL:
+                    n_hubs += 1
+                    relocated += sum(base.values()) - sum(min(q, HUB_MAP_CEIL) for q in base.values())
+                sa_maps = sub2coords.get(sa) or set(base)
+                for c, q in redistribute(base, sa_maps, HUB_MAP_CEIL).items():
+                    if q:
+                        cell_res[c][rid] = cell_res[c].get(rid, 0) + q
         else:                          # no dofus-map data (or all filtered): spread
             n_fallback += 1
             for sa, count in meta["subareas"]:
@@ -206,6 +245,9 @@ def main():
                 for c in maps:
                     cell_res[c][rid] = cell_res[c].get(rid, 0) + per
     print(f"   resources placed: {n_real} from dofus-map, {n_fallback} via sub-area spread")
+    if n_hubs:
+        print(f"   de-aggregated {n_hubs} sub-area hubs (count > {HUB_MAP_CEIL}); "
+              f"{relocated} units relocated onto neighbouring maps (total conserved)")
     if drops:
         drops.sort(key=lambda x: -x[1])
         tot = sum(n for _, n in drops)

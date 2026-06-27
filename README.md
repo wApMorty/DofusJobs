@@ -13,9 +13,9 @@ pénalisant les déplacements**.
 - **Données réelles (DofusDB + dofus-map)** : 85 ressources avec **niveau et pods
   authentiques** (DofusDB), placées au **niveau de la map** via les **vrais counts
   par map de dofus-map.com** (`getRessourceData.php?groupId=0`, carto monde entier
-  d'une ressource en une requête). 77/85 ressources ont des counts case-level réels ;
-  les 8 restantes (sans données dofus-map) retombent sur la répartition sous-zone
-  `resourcesBySubarea` × `map-positions`. Voir `scripts/build_dofusmap_counts.py`
+  d'une ressource en une requête). 70/85 ressources ont des counts case-level réels ;
+  les 15 restantes (sans données dofus-map exploitables) retombent sur la répartition
+  sous-zone `resourcesBySubarea` × `map-positions`. Voir `scripts/build_dofusmap_counts.py`
   (crawl+décodage) et `scripts/build_dofusdb_dataset.py` (bridge + assemblage).
 - **Départ libre** : aucun ancrage. Le moteur **choisit le meilleur point de départ**
   (premier stop à coût de trajet nul). Tu peux aussi imposer un départ.
@@ -58,7 +58,7 @@ borné) — réaliste et rapide. Déterministe (efficacité, valeur, trajet, ide
 
 ```bash
 cd DofusJobs
-python3 -m unittest discover -s tests   # 29 tests
+python3 -m unittest discover -s tests   # 36 tests
 ```
 
 ## Données
@@ -80,13 +80,15 @@ sous-zone seule.) Artefacts :
   n'expose pas l'XP de récolte.
 - **`world_cells.json`** : ~3800 cellules (une par map portant des ressources). La
   quantité d'une ressource sur une map vient des **vrais counts dofus-map** (la
-  distribution est saine : médiane 1, p90 3 spots/map). Les counts sont gardés
-  **bruts** (pas de cap) pour préserver la densité réelle des champs/forêts/mines
-  (blé jusqu'à 26, fer 44 sur les maps-mine) — un cap plat les écrasait. Contrepartie
-  connue : dofus-map agrège parfois tout un réseau d'eau/mine sur quelques coords
-  (les 4 coords d'Astrub portent ~100 de chaque poisson), donc l'optimiseur peut
-  sur-récolter ces rares hubs en un seul stop (`PER_MAP_CAP` réactive un clip si
-  besoin). **Filtre intérieurs/sous-maps** : dofus-map projette les
+  distribution est saine : médiane 1, p90 3 spots/map). **Dé-agrégation des hubs**
+  (`HUB_MAP_CEIL=30`) : dofus-map collapse parfois tout un réseau d'eau/mine sur
+  quelques coords (les 4 coords d'Astrub portent ~100 de *chaque* poisson). Au lieu
+  de capper (ce qui détruisait la vraie densité des champs — blé 26), on **répartit
+  le surplus au-dessus de 30 sur les autres maps de la sous-zone DofusDB** : le
+  **total est conservé** (aucune XP perdue) mais le hub redevient un **vrai tour
+  multi-maps** au lieu d'un point fixe. La densité réelle (≤30, ex. blé 26) est
+  laissée intacte ; seuls les vrais hubs sont étalés (~14 sous-zones, ~685 unités
+  relocalisées). **Filtre intérieurs/sous-maps** : dofus-map projette les
   spawns d'intérieur (ex. truites/goujons des **égouts d'Astrub**) sur la coordonnée
   de surface parente, ce qui gonflait la case ET faussait la distance (il faudrait
   *explorer* l'intérieur). On ne garde donc une coord que si DofusDB confirme
