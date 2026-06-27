@@ -77,9 +77,11 @@ def build_resources():
 
 
 def fetch_world_maps():
-    """All worldMap=1 map coords + subAreaId -> set of coords."""
+    """worldMap=1 coords (set) per sub-area + #worldMap=1 map-positions per
+    sub-area (the surface share, for apportioning the sub-area's count)."""
     coords = set()
     sub2coords = defaultdict(set)
+    sa_wm1 = Counter()          # worldMap=1 map-positions per sub-area
     pos_count = Counter()
     skip = 0
     total = None
@@ -100,6 +102,7 @@ def fetch_world_maps():
             coords.add((x, y))
             if sa is not None:
                 sub2coords[sa].add((x, y))
+                sa_wm1[sa] += 1
         skip += 50
         if skip % 2000 == 0:
             print(f"  map-positions {skip}/{total}")
@@ -109,7 +112,23 @@ def fetch_world_maps():
     busy = [(c, n) for c, n in pos_count.most_common(5) if n > 20]
     if busy:
         print(f"   busiest coords (possible placeholders): {busy}")
-    return coords, sub2coords
+    return coords, sub2coords, sa_wm1
+
+
+def fetch_subarea_total_maps(sas):
+    """Total map-positions (ALL worldMaps) per sub-area — the denominator for
+    apportioning a sub-area's resource count to its surface (worldMap=1) share."""
+    out = {}
+    sas = sorted(sas)
+    for i, sa in enumerate(sas):
+        try:
+            out[sa] = get(f"https://api.dofusdb.fr/map-positions?subAreaId={sa}&$limit=0").get("total") or 0
+        except Exception:                                  # noqa: BLE001
+            out[sa] = 0
+        if i % 50 == 0:
+            print(f"  sub-area totals {i}/{len(sas)}")
+        time.sleep(0.02)
+    return out
 
 
 def main():
@@ -118,8 +137,11 @@ def main():
     print(f"   harvestable gathering resources: {len(resources)}")
 
     print("2) world maps (worldMap=1) ...")
-    coords, sub2coords = fetch_world_maps()
+    coords, sub2coords, sa_wm1 = fetch_world_maps()
     print(f"   main-world maps: {len(coords)}, sub-areas with maps: {len(sub2coords)}")
+
+    print("2b) sub-area total map counts (apportion to surface share) ...")
+    sa_total = fetch_subarea_total_maps(sub2coords.keys())
 
     print("3) building cells (authoritative DofusDB counts, worldMap=1 surface only) ...")
     cell_res = defaultdict(dict)   # (x,y) -> {rid: qty}
@@ -142,6 +164,14 @@ def main():
         for sa, count in sorted(meta["subareas"]):
             maps = sub2coords.get(sa)
             if not maps or count <= 0:
+                continue
+            # Apportion the sub-area's count to its SURFACE share: a mine sub-area
+            # may hold 121 iron but be mostly interior (worldMap=-1) with only a few
+            # worldMap=1 entrance maps — only that fraction is harvestable on the
+            # overworld. count_surface = count * (worldMap1 positions / all positions).
+            total_pos = sa_total.get(sa) or sa_wm1.get(sa, len(maps))
+            count = round(count * sa_wm1.get(sa, len(maps)) / total_pos) if total_pos else count
+            if count <= 0:
                 continue
             maps = sorted(maps)
             # density = count over ALL of the sub-area's maps (low), but only place

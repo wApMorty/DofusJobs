@@ -91,14 +91,15 @@ Artefacts :
   `pods` **authentiques DofusDB** (`api.dofusdb.fr`). `base_xp` = **calibré
   communautaire** (`xp ≈ 7 + 0.36·niveau`, ancré sur next-stage) car DofusDB
   n'expose pas l'XP de récolte.
-- **`world_cells.json`** : ~3050 cellules (une par map portant des ressources). La
-  quantité d'une ressource sur une map = le **compte DofusDB de sa sous-zone réparti
-  sur les maps `worldMap=1` de cette sous-zone**. Pas de seuil ni de cap : le filtre
-  `worldMap=1` + l'exclusion de **(0,0)** suffisent à écarter les faux hubs (les gros
-  stocks de fer/poisson sont en `worldMap=-1`/autres continents, hors graphe).
-  *Limite connue* : une coord de surface qui est l'entrée de plusieurs sous-maps de
-  mine empilées (ex. (-3,9), Mine Istairameur) peut encore cumuler le fer de
-  plusieurs sous-zones.
+- **`world_cells.json`** : ~2500 cellules (une par map portant des ressources). La
+  quantité d'une ressource sur une map = le **compte DofusDB de sa sous-zone**,
+  **proratisé à la part de surface** (`× positions worldMap=1 / positions totales` :
+  une mine majoritairement intérieure ne met sur la surface que la fraction de ses
+  entrées), **réparti** sur les maps `worldMap=1` de la sous-zone, et **dédupliqué**
+  (une coord dans plusieurs sous-zones qui se recouvrent ne reçoit la ressource que
+  d'une seule). Pas de seuil ni de cap. Résultat : quantités réalistes (fer ≤ 9,
+  poisson/blé/bois ≤ 3) — les faux hubs (fusion worldmaps de dofus-map, null-island
+  (0,0), entrées de mines empilées) sont tous éliminés **structurellement**.
 - *(déprécié)* **`dofusmap_counts.json`** / `scripts/build_dofusmap_counts.py` : la
   carto dofus-map décodée n'est **plus utilisée** pour le placement (counts gonflés
   par la fusion des worldmaps) ; conservés pour référence.
