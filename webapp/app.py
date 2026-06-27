@@ -150,10 +150,23 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="DofusJobs web app")
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--open", action="store_true",
+                    help="open the app in the default web browser on startup")
     args = ap.parse_args()
     get_data()
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"DofusJobs web app on http://{args.host}:{args.port}")
+    url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '') else args.host}:{args.port}"
+    print(f"DofusJobs web app on {url}  (ferme cette fenetre pour arreter)")
+    if args.open:
+        import threading
+        import webbrowser
+
+        def _open():
+            try:
+                webbrowser.open(url)
+            except Exception:       # noqa: BLE001  (never let browser issues break the app)
+                pass
+        threading.Timer(1.0, _open).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

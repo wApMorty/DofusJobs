@@ -118,8 +118,16 @@ Artefacts :
 
 ### Application web
 
+**Windows (le plus simple)** : double-clique sur **`start.bat`** — il démarre l'appli
+et l'ouvre dans ton navigateur. (Il faut [Python](https://www.python.org/downloads/)
+installé, avec la case *« Add Python to PATH »* cochée ; sinon le script te le dit.)
+Pour arrêter : ferme la fenêtre noire.
+
+En ligne de commande (tous OS) :
+
 ```bash
 python3 -m webapp.app --port 8000          # http://127.0.0.1:8000
+python3 -m webapp.app --open               # + ouvre le navigateur automatiquement
 ```
 
 Deux vues :
