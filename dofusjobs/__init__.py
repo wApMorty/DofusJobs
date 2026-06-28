@@ -25,6 +25,7 @@ from .models import (
     RouteResult,
 )
 from .farmloop import FarmLoopFinder, FarmLoopResult
+from .engine_policy import load_policy, resolve_engine
 from .optimizer import Optimizer
 
 __all__ = [
@@ -43,6 +44,8 @@ __all__ = [
     "JOB_LABELS_FR",
     "plan_route",
     "plan_farm_route",
+    "resolve_engine",
+    "load_policy",
 ]
 
 __version__ = "0.2.0"

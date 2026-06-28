@@ -20,10 +20,12 @@ La mémoire projet prime sur ce fichier pour l'état courant :
 - Une fiche peut être périmée : vérifier qu'un fichier/fonction cité existe encore avant de s'en servir.
 
 ## Commandes
-- Tests (porte verte obligatoire) : `python3 -m unittest discover -s tests`  *(48 tests)*
+- Tests (porte verte obligatoire) : `python3 -m unittest discover -s tests`  *(60 tests)*
 - CLI : `python3 -m dofusjobs`
-- Web : `python3 webapp/app.py` (http.server stdlib ; formulaire + `POST /api/plan`, param `engine=beam|mcts`)
+- Web : `python3 webapp/app.py` (http.server stdlib ; formulaire + `POST /api/plan`, param `engine=auto|beam|mcts`)
 - Bench qualité de route (rate = valeur/écran, greedy/beam/mcts) : `python3 scripts/bench_routes.py`
+- Régénérer la table `engine=auto` (moteur+λ choisis selon le régime de niveaux ; **à refaire après
+  toute reconstruction du dataset**) : `python3 scripts/bench_routes.py --emit-policy > data/engine_policy.json`
 - Reconstruire le dataset (ordre impératif) :
   `python3 scripts/build_dofusmap_counts.py` **puis** `python3 scripts/build_dofusdb_dataset.py`
 
@@ -37,6 +39,11 @@ La mémoire projet prime sur ce fichier pour l'état courant :
   un rate brut ou une somme non bornée échouent — voir mémoire), rollout glouton plafonné, branchement
   limité. Garantie ≥ greedy par décision (rollout de Bertsekas). UI : `engine=mcts`. Détail/pièges en
   mémoire (`dofusjobs-project.md`).
+- **Mode `engine=auto`** : `dofusjobs/engine_policy.py` (`resolve_engine`) choisit moteur+λ d'après le
+  régime de niveaux (feature = niveau min + écart max−min, en buckets) via une table pré-calculée
+  `data/engine_policy.json` (générée par `bench_routes.py --emit-policy`, objectif = vitesse %XP/écran).
+  Lookup pur/déterministe, repli sur beam/λ=1 si table absente/clé manquante/tout-200. L'UI le
+  ré-évalue à chaque case (niveaux courants). Le défaut UI est désormais `auto`.
 - `dofusjobs/optimizer.py` = **legacy à pods, NON utilisé par l'UI** ; ne pas y revenir sans demande
   explicite.
 - Reste : `models.py`, `mapgraph.py` (graphe de vraies maps + BFS borné), `leveling.py` (table XP),

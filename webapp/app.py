@@ -27,6 +27,7 @@ from dofusjobs import (  # noqa: E402
     FarmLoopFinder,
     JobXpTable,
     load_dataset,
+    resolve_engine,
 )
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
@@ -80,7 +81,7 @@ def plan(payload: dict) -> dict:
     horizon = max(1, min(40, int(payload.get("horizon", 20))))
     lam = float(payload.get("lambda_travel", 1.0))
     metric = "xp" if payload.get("metric") == "xp" else "levels"
-    engine = "mcts" if payload.get("engine") == "mcts" else "beam"
+    raw_engine = payload.get("engine")
 
     st = payload.get("state")
     if not st:                                   # session start
@@ -100,6 +101,14 @@ def plan(payload: dict) -> dict:
             else:
                 visited.append(coord)            # skip: just don't suggest it again
 
+    levels_now = {j: _XP_TABLE.level_for_xp(job_xp[j]) for j in GATHERING_JOBS}
+    auto = None
+    if raw_engine == "auto":                     # pick engine + lambda from the levels
+        auto = resolve_engine(levels_now, metric)  # recomputed each step (live levels)
+        engine, lam = auto["engine"], float(auto["lambda_travel"])
+    else:
+        engine = "mcts" if raw_engine == "mcts" else "beam"
+
     if engine == "mcts":
         window = f.plan_window_mcts(pos, job_xp, visited, horizon=horizon,
                                     metric=metric, lambda_travel=lam)
@@ -109,9 +118,11 @@ def plan(payload: dict) -> dict:
     return {
         "window": window,
         "state": {"pos": pos, "job_xp": job_xp, "visited": visited},
-        "levels": {j: _XP_TABLE.level_for_xp(job_xp[j]) for j in GATHERING_JOBS},
+        "levels": levels_now,
         "metric": metric,
         "engine": engine,
+        "lambda_travel": lam,
+        "auto": auto,
         "done": not window,
         "job_labels": JOB_LABELS_FR,
     }

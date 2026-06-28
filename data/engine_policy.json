@@ -1,0 +1,265 @@
+{
+  "schema": 1,
+  "generated_by": "scripts/bench_routes.py --emit-policy",
+  "dataset_fingerprint": "6ae12cf5dcf0",
+  "min_level_buckets": [
+    [
+      1,
+      9,
+      "low"
+    ],
+    [
+      10,
+      29,
+      "early"
+    ],
+    [
+      30,
+      59,
+      "mid"
+    ],
+    [
+      60,
+      99,
+      "high"
+    ],
+    [
+      100,
+      199,
+      "veryhigh"
+    ],
+    [
+      200,
+      200,
+      "max"
+    ]
+  ],
+  "spread_buckets": [
+    [
+      0,
+      4,
+      "flat"
+    ],
+    [
+      5,
+      19,
+      "small"
+    ],
+    [
+      20,
+      49,
+      "medium"
+    ],
+    [
+      50,
+      9999,
+      "large"
+    ]
+  ],
+  "default": {
+    "engine": "beam",
+    "lambda_travel": 1.0
+  },
+  "table": {
+    "levels|low|flat": {
+      "engine": "mcts",
+      "lambda_travel": 2.0,
+      "rate": 52.6074
+    },
+    "levels|low|small": {
+      "engine": "mcts",
+      "lambda_travel": 0.5,
+      "rate": 46.6248
+    },
+    "levels|low|medium": {
+      "engine": "mcts",
+      "lambda_travel": 2.0,
+      "rate": 64.6477
+    },
+    "levels|low|large": {
+      "engine": "beam",
+      "lambda_travel": 0.5,
+      "rate": 56.8374
+    },
+    "levels|early|flat": {
+      "engine": "beam",
+      "lambda_travel": 0.5,
+      "rate": 74.025
+    },
+    "levels|early|small": {
+      "engine": "mcts",
+      "lambda_travel": 1.0,
+      "rate": 68.4489
+    },
+    "levels|early|medium": {
+      "engine": "mcts",
+      "lambda_travel": 2.0,
+      "rate": 77.8789
+    },
+    "levels|early|large": {
+      "engine": "mcts",
+      "lambda_travel": 0.5,
+      "rate": 55.0209
+    },
+    "levels|mid|flat": {
+      "engine": "beam",
+      "lambda_travel": 0.5,
+      "rate": 78.5765
+    },
+    "levels|mid|small": {
+      "engine": "beam",
+      "lambda_travel": 0.5,
+      "rate": 81.6942
+    },
+    "levels|mid|medium": {
+      "engine": "beam",
+      "lambda_travel": 0.5,
+      "rate": 65.3187
+    },
+    "levels|mid|large": {
+      "engine": "beam",
+      "lambda_travel": 2.0,
+      "rate": 45.5969
+    },
+    "levels|high|flat": {
+      "engine": "beam",
+      "lambda_travel": 0.5,
+      "rate": 63.8378
+    },
+    "levels|high|small": {
+      "engine": "beam",
+      "lambda_travel": 1.0,
+      "rate": 57.69
+    },
+    "levels|high|medium": {
+      "engine": "mcts",
+      "lambda_travel": 2.0,
+      "rate": 47.1998
+    },
+    "levels|high|large": {
+      "engine": "mcts",
+      "lambda_travel": 2.0,
+      "rate": 35.6351
+    },
+    "levels|veryhigh|flat": {
+      "engine": "mcts",
+      "lambda_travel": 0.0,
+      "rate": 37.7331
+    },
+    "levels|veryhigh|small": {
+      "engine": "mcts",
+      "lambda_travel": 0.5,
+      "rate": 35.5002
+    },
+    "levels|veryhigh|medium": {
+      "engine": "mcts",
+      "lambda_travel": 1.0,
+      "rate": 31.4363
+    },
+    "levels|veryhigh|large": {
+      "engine": "beam",
+      "lambda_travel": 0.5,
+      "rate": 10.5127
+    },
+    "xp|low|flat": {
+      "engine": "beam",
+      "lambda_travel": 0.5,
+      "rate": 111.9
+    },
+    "xp|low|small": {
+      "engine": "beam",
+      "lambda_travel": 0.5,
+      "rate": 174.2059
+    },
+    "xp|low|medium": {
+      "engine": "beam",
+      "lambda_travel": 1.0,
+      "rate": 685.52
+    },
+    "xp|low|large": {
+      "engine": "mcts",
+      "lambda_travel": 0.0,
+      "rate": 880.5769
+    },
+    "xp|early|flat": {
+      "engine": "beam",
+      "lambda_travel": 2.0,
+      "rate": 415.0909
+    },
+    "xp|early|small": {
+      "engine": "mcts",
+      "lambda_travel": 0.0,
+      "rate": 505.7727
+    },
+    "xp|early|medium": {
+      "engine": "beam",
+      "lambda_travel": 0.5,
+      "rate": 915.5455
+    },
+    "xp|early|large": {
+      "engine": "mcts",
+      "lambda_travel": 0.5,
+      "rate": 1046.7273
+    },
+    "xp|mid|flat": {
+      "engine": "beam",
+      "lambda_travel": 0.5,
+      "rate": 833.6667
+    },
+    "xp|mid|small": {
+      "engine": "beam",
+      "lambda_travel": 0.5,
+      "rate": 1028.381
+    },
+    "xp|mid|medium": {
+      "engine": "beam",
+      "lambda_travel": 0.5,
+      "rate": 1094.8095
+    },
+    "xp|mid|large": {
+      "engine": "mcts",
+      "lambda_travel": 0.0,
+      "rate": 1083.3333
+    },
+    "xp|high|flat": {
+      "engine": "mcts",
+      "lambda_travel": 0.5,
+      "rate": 1052.8182
+    },
+    "xp|high|small": {
+      "engine": "mcts",
+      "lambda_travel": 0.5,
+      "rate": 1052.8182
+    },
+    "xp|high|medium": {
+      "engine": "mcts",
+      "lambda_travel": 0.5,
+      "rate": 1052.8182
+    },
+    "xp|high|large": {
+      "engine": "beam",
+      "lambda_travel": 2.0,
+      "rate": 1092.9524
+    },
+    "xp|veryhigh|flat": {
+      "engine": "mcts",
+      "lambda_travel": 0.0,
+      "rate": 1164.4
+    },
+    "xp|veryhigh|small": {
+      "engine": "mcts",
+      "lambda_travel": 0.0,
+      "rate": 1164.4
+    },
+    "xp|veryhigh|medium": {
+      "engine": "beam",
+      "lambda_travel": 0.5,
+      "rate": 1166.25
+    },
+    "xp|veryhigh|large": {
+      "engine": "mcts",
+      "lambda_travel": 0.0,
+      "rate": 1074.2727
+    }
+  }
+}

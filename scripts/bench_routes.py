@@ -13,6 +13,9 @@ It only reads the dataset and prints a table; it writes nothing.
 
 from __future__ import annotations
 
+import argparse
+import hashlib
+import json
 import os
 import sys
 import time
@@ -25,6 +28,13 @@ from dofusjobs import (  # noqa: E402
     JobXpTable,
     load_dataset,
 )
+from dofusjobs.engine_policy import (  # noqa: E402
+    _BUILTIN_MIN_BUCKETS,
+    _BUILTIN_SPREAD_BUCKETS,
+    _BUILTIN_DEFAULT,
+)
+
+_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 
 # Fixed scenarios: a few starting-level mixes (the unbalanced ones are where
 # lookahead matters most), each crossed with metric and travel weight.
@@ -87,7 +97,99 @@ def _engines(finder, metric, lam):
     return {"greedy": greedy, "beam": beam, "mcts": mcts}
 
 
+# ---------------------------------------------------------------------------
+# Policy generation (engine=auto): bake the A/B verdict into a lookup table.
+# ---------------------------------------------------------------------------
+
+# A representative level for the centre of each min-level bucket (the catch-all
+# "max" bucket is skipped — all jobs at 200 means nothing to farm).
+_MIN_CENTERS = {"low": 5, "early": 20, "mid": 45, "high": 80, "veryhigh": 150}
+# A representative gap for the centre of each spread bucket.
+_SPREAD_CENTERS = {"flat": 2, "small": 12, "medium": 35, "large": 75}
+
+POLICY_K_STEPS = 20                       # committed stops per probe
+POLICY_LAMBDAS = (0.0, 0.5, 1.0, 2.0)     # travel-weight candidates
+
+
+def _synth_levels(floor: int, spread: int) -> dict:
+    """A deterministic 5-job level mix at the given regime: everyone at ``floor``,
+    the last two jobs raised by ``spread`` (clamped to 200) to realise the gap.
+    Job order is fixed by ``GATHERING_JOBS`` so the synthesis is reproducible."""
+    jobs = list(GATHERING_JOBS)
+    top = min(200, floor + spread)
+    levels = {j: floor for j in jobs}
+    for j in jobs[-2:]:
+        levels[j] = top
+    return levels
+
+
+def _dataset_fingerprint() -> str:
+    """Short sha1 over the dataset files, so a regenerated table can be told
+    apart from a stale one (informational; never gates the app)."""
+    h = hashlib.sha1()
+    for name in ("resources.json", "world_cells.json"):
+        with open(os.path.join(_DATA_DIR, name), "rb") as fh:
+            h.update(fh.read())
+    return h.hexdigest()[:12]
+
+
+def _best_config(finder, metric, job_xp):
+    """Sweep {beam, mcts} x POLICY_LAMBDAS over the rolling loop and return the
+    (engine, lambda, rate) with the best leveling rate. Tie-break is
+    deterministic: higher rate, then prefer beam (cheaper, the historical
+    default), then the smaller lambda."""
+    cands = []
+    for lam in POLICY_LAMBDAS:
+        engines = _engines(finder, metric, lam)
+        for name in ("beam", "mcts"):
+            r = _roll(engines[name], finder, job_xp, POLICY_K_STEPS)
+            cands.append((r["rate"], name, lam))
+    rate, name, lam = max(cands, key=lambda c: (c[0], 1 if c[1] == "beam" else 0, -c[2]))
+    return name, lam, rate
+
+
+def emit_policy() -> None:
+    """Print ``data/engine_policy.json`` to stdout (progress on stderr, so the
+    JSON stays clean for redirection)."""
+    xp_table = JobXpTable.load()
+    resources, cells, maps = load_dataset()
+    finder = FarmLoopFinder(resources, cells, maps=maps, xp_table=xp_table)
+
+    table = {}
+    for metric in METRICS:
+        for _lo, _hi, mlabel in _BUILTIN_MIN_BUCKETS:
+            if mlabel == "max":
+                continue
+            for _slo, _shi, slabel in _BUILTIN_SPREAD_BUCKETS:
+                levels = _synth_levels(_MIN_CENTERS[mlabel], _SPREAD_CENTERS[slabel])
+                job_xp = {j: xp_table.xp_for_level(levels[j]) for j in GATHERING_JOBS}
+                name, lam, rate = _best_config(finder, metric, job_xp)
+                key = f"{metric}|{mlabel}|{slabel}"
+                table[key] = {"engine": name, "lambda_travel": lam, "rate": round(rate, 4)}
+                print(f"{key:<28} -> {name:<5} lambda={lam} (rate {rate:.4f})",
+                      file=sys.stderr, flush=True)
+
+    policy = {
+        "schema": 1,
+        "generated_by": "scripts/bench_routes.py --emit-policy",
+        "dataset_fingerprint": _dataset_fingerprint(),
+        "min_level_buckets": _BUILTIN_MIN_BUCKETS,
+        "spread_buckets": _BUILTIN_SPREAD_BUCKETS,
+        "default": dict(_BUILTIN_DEFAULT),
+        "table": table,
+    }
+    print(json.dumps(policy, indent=2, ensure_ascii=False))
+
+
 def main() -> None:
+    ap = argparse.ArgumentParser(description="Route-quality benchmark / policy generator")
+    ap.add_argument("--emit-policy", action="store_true",
+                    help="print data/engine_policy.json to stdout (engine=auto table)")
+    args = ap.parse_args()
+    if args.emit_policy:
+        emit_policy()
+        return
+
     xp_table = JobXpTable.load()
     resources, cells, maps = load_dataset()
     finder = FarmLoopFinder(resources, cells, maps=maps, xp_table=xp_table)
