@@ -2,7 +2,8 @@
 
 Routes:
   GET  /                 -> input form (level per job, lambda, metric)
-  POST /api/route        -> JSON {job_levels, lambda_travel, metric} -> farm route
+  POST /api/plan         -> JSON {job_levels|state, horizon, lambda_travel, metric}
+                            -> next window of the interactive rolling planner
   GET  /healthz          -> "ok"
 
 Run:  python -m webapp.app  [--port 8000]
@@ -57,16 +58,6 @@ _XP_TABLE = JobXpTable.load()
 def _finder() -> FarmLoopFinder:
     resources, cells, maps = get_data()
     return FarmLoopFinder(resources, cells, maps=maps, xp_table=_XP_TABLE)
-
-
-def compute(payload: dict) -> dict:
-    levels = payload.get("job_levels", {})
-    job_levels = {j: int(levels.get(j, 1)) for j in GATHERING_JOBS}
-    lam = float(payload.get("lambda_travel", 1.0))
-    metric = "xp" if payload.get("metric") == "xp" else "levels"
-    out = _finder().find(job_levels, metric=metric, lambda_travel=lam).to_dict()
-    out["job_labels"] = JOB_LABELS_FR
-    return out
 
 
 def plan(payload: dict) -> dict:
@@ -128,7 +119,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b"not found", "text/plain")
 
     def do_POST(self):  # noqa: N802
-        handlers = {"/api/route": compute, "/api/plan": plan}
+        handlers = {"/api/plan": plan}
         fn = handlers.get(self.path)
         if fn is None:
             self._send(404, b'{"error":"not found"}', "application/json")

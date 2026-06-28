@@ -24,23 +24,12 @@
   button { width:100%; margin-top:14px; padding:11px; background:var(--acc); color:#10210f; border:0; border-radius:8px; font-weight:700; cursor:pointer; }
   button:disabled { opacity:.6; cursor:wait; }
   .check { display:flex; align-items:center; gap:8px; margin-top:10px; color:var(--mut); font-size:13px; }
-  .metrics { display:flex; flex-wrap:wrap; gap:14px; margin-bottom:14px; }
-  .metric { background:#1b1f24; border:1px solid #333; border-radius:8px; padding:10px 14px; min-width:120px; }
-  .metric .k { color:var(--mut); font-size:12px; } .metric .v { font-size:20px; font-weight:700; }
   table { width:100%; border-collapse:collapse; font-size:14px; }
   th,td { text-align:left; padding:7px 8px; border-bottom:1px solid #2f3640; }
   th { color:var(--mut); font-weight:600; }
-  .stop { color:var(--acc); font-weight:600; }
   .coord { cursor:pointer; color:var(--acc); font-weight:600; border-bottom:1px dashed var(--acc); white-space:nowrap; }
   .coord:hover { background:#1f3a44; }
   .coord.copied { color:#8fd3e8; border-bottom-color:transparent; }
-  /* tabs */
-  .tabs { display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid #333; }
-  .tab { width:auto; margin:0; padding:10px 20px; background:transparent; color:var(--mut); border:0; border-bottom:2px solid transparent; border-radius:0; font-weight:700; font-size:14px; cursor:pointer; }
-  .tab:hover { color:var(--txt); }
-  .tab.active { color:var(--acc); border-bottom-color:var(--acc); }
-  .panel { display:none; }
-  .panel.active { display:block; }
   /* interactive step */
   .step-progress { height:6px; background:#1b1f24; border:1px solid #333; border-radius:5px; overflow:hidden; margin-bottom:16px; }
   .step-bar { height:100%; background:var(--acc); transition:width .2s ease; }
@@ -103,8 +92,7 @@
 const JOBS = Array.from(document.querySelectorAll('[name^=lvl_]')).map(i => i.name.slice(4));
 const form = document.getElementById('form');
 const resultEl = document.getElementById('result');
-let lastData = null;                 // last full route (Liste tab)
-let sess = null, sessParams = null, liveHorizon = 20;   // live planner (Interactif)
+let sess = null, sessParams = null, liveHorizon = 20;   // live rolling planner
 
 async function copyText(text) {
   try {
@@ -139,80 +127,18 @@ form.addEventListener('submit', async (e) => {
   btn.disabled = true; btn.textContent = 'Calcul…';
   const job_levels = {};
   JOBS.forEach(j => job_levels[j] = Number(form.querySelector(`[name=lvl_${j}]`).value || 0));
-  const payload = {
+  sessParams = {
     job_levels,
     lambda_travel: Number(form.lambda_travel.value || 0),
     metric: document.getElementById('metric').value,
   };
-  sessParams = payload;            // reused by the live planner (Interactif tab)
+  sess = null;                     // fresh rolling session for the new search
   try {
-    const r = await fetch('/api/route', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'erreur');
-    render(data);
-  } catch (err) {
-    resultEl.innerHTML = `<div class="reason">Erreur : ${err.message}</div>`;
+    await startLive();
   } finally {
     btn.disabled = false; btn.textContent = 'Calculer la route';
   }
 });
-
-function render(d) {
-  const labels = d.job_labels || {};
-  const metrics = `
-    <div class="metrics">
-      <div class="metric"><div class="k">${d.metric==='levels'?'Niveaux gagnés':'XP gagnée'}</div><div class="v">${d.metric==='levels'?'+'+((d.total_value||0)/100).toFixed(1):Math.round(d.total_value||0)}</div></div>
-      <div class="metric"><div class="k">Écrans</div><div class="v">${d.screens}</div></div>
-      <div class="metric"><div class="k">Vitesse</div><div class="v" style="font-size:15px">${(d.rate||0).toFixed(2)} ${d.metric==='levels'?'%niv':'xp'}/écran</div></div>
-      <div class="metric"><div class="k">Stops</div><div class="v">${(d.stops||[]).length}</div></div>
-    </div>`;
-  const byJob = Object.entries(d.per_job || {}).sort((a,b)=>b[1]-a[1]).map(([j,v]) => {
-    const sl = (d.start_levels||{})[j], el = (d.end_levels||{})[j];
-    const g = d.metric==='levels' ? `+${(v/100).toFixed(2)} lvl` : `+${Math.round(v)} xp`;
-    return `<span class="badge">${labels[j]||j}: ${sl}→${el} <small>(${g})</small></span>`;
-  }).join(' ') || '<span class="empty">—</span>';
-
-  lastData = d;
-
-  let rows = '';
-  d.stops.forEach((s, i) => {
-    const move = i===0
-      ? '<span class="empty">départ</span>'
-      : (dirsHtml(s) || '<span class="empty">sur place</span>');
-    rows += `<tr>
-      <td>${i}</td>
-      <td>${coordChip(s)}</td>
-      <td>${move}</td>
-      <td>${(s.value||0).toFixed(1)}</td>
-      <td>${harvestBadges(s)}</td></tr>`;
-  });
-  resultEl.innerHTML = `
-    ${metrics}
-    <div style="margin-bottom:12px">Détail par métier : ${byJob}</div>
-    <div class="tabs">
-      <button class="tab active" data-tab="list">📋 Liste</button>
-      <button class="tab" data-tab="step">🧭 Interactif</button>
-    </div>
-    <div id="panel-list" class="panel active">
-      <div class="hint" style="margin-bottom:6px">💡 Clique sur une coordonnée pour copier la commande <code>/travel x y</code> (autopilote en jeu).</div>
-      <table>
-        <thead><tr><th>#</th><th>Coords</th><th>Déplacement</th><th>Score %XP</th><th>Récoltes</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div class="reason">Fin : <code>${d.terminated}</code></div>
-    </div>
-    <div id="panel-step" class="panel"></div>`;
-  resultEl.querySelectorAll('.tab').forEach(t =>
-    t.addEventListener('click', () => switchTab(t.dataset.tab)));
-  sess = null;                     // reset the live session for the new search
-}
-
-function switchTab(name) {
-  resultEl.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab===name));
-  resultEl.querySelector('#panel-list').classList.toggle('active', name==='list');
-  resultEl.querySelector('#panel-step').classList.toggle('active', name==='step');
-  if (name === 'step') { sess ? renderLive() : startLive(); }
-}
 
 function harvestBadges(s) {
   return (s.harvests||[]).map(h => `<span class="badge">${h.resource_name} ×${h.quantity}</span>`).join(' ')
@@ -236,21 +162,21 @@ async function apiPlan(body) {
 }
 
 async function startLive() {
-  if (!sessParams) { resultEl.querySelector('#panel-step').innerHTML =
+  if (!sessParams) { resultEl.innerHTML =
     '<div class="empty">Lance d\'abord un calcul.</div>'; return; }
-  resultEl.querySelector('#panel-step').innerHTML = '<div class="empty">Calcul de la fenêtre…</div>';
+  resultEl.innerHTML = '<div class="empty">Calcul de la fenêtre…</div>';
   try {
     const d = await apiPlan({});            // no state -> session start
     sess = {state:d.state, levels:d.levels, startLevels:d.levels, labels:d.job_labels,
             window:d.window, done:d.done, screens:0};
     renderLive();
-  } catch (e) { resultEl.querySelector('#panel-step').innerHTML = `<div class="reason">Erreur : ${e.message}</div>`; }
+  } catch (e) { resultEl.innerHTML = `<div class="reason">Erreur : ${e.message}</div>`; }
 }
 
 async function liveStep(harvest) {            // harvest=true: avance ; false: saute
   if (!sess || !sess.window.length) return;
   const first = sess.window[0];
-  const btns = resultEl.querySelectorAll('#panel-step .navbtn'); btns.forEach(b => b.disabled = true);
+  const btns = resultEl.querySelectorAll('.navbtn'); btns.forEach(b => b.disabled = true);
   try {
     const d = await apiPlan({state: sess.state, commit:{coord:first.world_coords, harvest}});
     if (harvest) sess.screens += (first.travel || 0);
@@ -266,7 +192,7 @@ async function liveReplan() {                 // depth change: re-plan, keep sta
 }
 
 function renderLive() {
-  const panel = resultEl.querySelector('#panel-step');
+  const panel = resultEl;
   if (!sess) return startLive();
   const labels = sess.labels || {};
   const gains = Object.keys(sess.levels).map(j => {
