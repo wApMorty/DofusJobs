@@ -24,7 +24,7 @@ from .models import (
     Resource,
     RouteResult,
 )
-from .farmloop import FarmLoopFinder, FarmLoopResult
+from .farmloop import AVAILABILITY_ALPHA, FarmLoopFinder, FarmLoopResult, ewma_update
 from .engine_policy import load_policy, resolve_engine
 from .optimizer import Optimizer
 
@@ -34,6 +34,8 @@ __all__ = [
     "Optimizer",
     "FarmLoopFinder",
     "FarmLoopResult",
+    "ewma_update",
+    "AVAILABILITY_ALPHA",
     "JobXpTable",
     "PlayerInput",
     "Resource",

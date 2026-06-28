@@ -107,6 +107,19 @@ let sess = null, sessParams = null, liveHorizon = 20;   // live rolling planner
 // no dependency). Versioned key so the schema can be invalidated cleanly.
 const STORE_KEY = 'dofusjobs.form.v1';
 
+// Learned map availability {"x,y": a} (anti bot-depletion): persisted across
+// laps AND visits, client-side only. "Vide" reports decay a map; harvesting it
+// raises it back. Corrupt/blocked storage falls back to {} (=> every map a=1.0).
+const AVAIL_KEY = 'dofusjobs.avail.v1';
+function loadAvail() {
+  try { return JSON.parse(localStorage.getItem(AVAIL_KEY)) || {}; }
+  catch (e) { return {}; }
+}
+function saveAvail(a) {
+  try { if (a) localStorage.setItem(AVAIL_KEY, JSON.stringify(a)); }
+  catch (e) { /* private mode / quota: never break the app */ }
+}
+
 function saveForm() {
   try {
     const levels = {};
@@ -207,6 +220,7 @@ async function apiPlan(body) {
     body: JSON.stringify({...sessParams, ...body, horizon: liveHorizon})});
   const d = await r.json();
   if (!r.ok) throw new Error(d.error || 'erreur');
+  if (d.state && d.state.availability) saveAvail(d.state.availability);  // persist learned map
   return d;
 }
 
@@ -215,20 +229,20 @@ async function startLive() {
     '<div class="empty">Lance d\'abord un calcul.</div>'; return; }
   resultEl.innerHTML = '<div class="empty">Calcul de la fenêtre…</div>';
   try {
-    const d = await apiPlan({});            // no state -> session start
+    const d = await apiPlan({availability: loadAvail()});   // seed persisted map; session start
     sess = {state:d.state, levels:d.levels, startLevels:d.levels, labels:d.job_labels,
             window:d.window, done:d.done, screens:0, auto:d.auto, engine:d.engine};
     renderLive();
   } catch (e) { resultEl.innerHTML = `<div class="reason">Erreur : ${e.message}</div>`; }
 }
 
-async function liveStep(harvest) {            // harvest=true: avance ; false: saute
+async function liveCommit(kind) {             // 'advance' | 'skip' | 'empty'
   if (!sess || !sess.window.length) return;
   const first = sess.window[0];
   const btns = resultEl.querySelectorAll('.navbtn'); btns.forEach(b => b.disabled = true);
   try {
-    const d = await apiPlan({state: sess.state, commit:{coord:first.world_coords, harvest}});
-    if (harvest) sess.screens += (first.travel || 0);
+    const d = await apiPlan({state: sess.state, commit:{coord:first.world_coords, kind}});
+    if (kind === 'advance') sess.screens += (first.travel || 0);   // only a real move costs screens
     sess.state = d.state; sess.levels = d.levels; sess.window = d.window; sess.done = d.done;
     sess.auto = d.auto; sess.engine = d.engine;
     renderLive();
@@ -281,15 +295,17 @@ function renderLive() {
         <div class="step-harv">${harvestBadges(cur)}</div></div>
     </div>
     <div class="step-nav">
-      <button class="navbtn" data-act="skip">⤳ Sauter</button>
+      <button class="navbtn" data-act="empty" title="Map vidée par des bots : baisse sa valeur durablement et re-route sans avancer">⌀ Vide</button>
+      <button class="navbtn" data-act="skip" title="Pas maintenant : ne la propose plus ce tour (sans la juger vide)">⤳ Sauter</button>
       <button class="navbtn primary" data-act="next">Suivant ▶</button>
     </div>
     <details style="margin-top:14px"><summary class="muted">Aperçu des ${sess.window.length-1} cases suivantes</summary>
       <table style="margin-top:8px"><thead><tr><th>#</th><th>Coords</th><th>Dépl.</th><th>Score</th><th>Récoltes</th></tr></thead>
       <tbody>${preview}</tbody></table></details>`;
   panel.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => { liveHorizon = Number(b.dataset.h); liveReplan(); }));
-  panel.querySelector('[data-act=next]').addEventListener('click', () => liveStep(true));
-  panel.querySelector('[data-act=skip]').addEventListener('click', () => liveStep(false));
+  panel.querySelector('[data-act=next]').addEventListener('click', () => liveCommit('advance'));
+  panel.querySelector('[data-act=skip]').addEventListener('click', () => liveCommit('skip'));
+  panel.querySelector('[data-act=empty]').addEventListener('click', () => liveCommit('empty'));
 }
 
 loadForm();   // pre-fill from the last saved config (DOM is ready: script is at end of body)

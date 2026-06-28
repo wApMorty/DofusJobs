@@ -20,10 +20,11 @@ La mémoire projet prime sur ce fichier pour l'état courant :
 - Une fiche peut être périmée : vérifier qu'un fichier/fonction cité existe encore avant de s'en servir.
 
 ## Commandes
-- Tests (porte verte obligatoire) : `python3 -m unittest discover -s tests`  *(60 tests)*
+- Tests (porte verte obligatoire) : `python3 -m unittest discover -s tests`  *(77 tests)*
 - CLI : `python3 -m dofusjobs`
 - Web : `python3 webapp/app.py` (http.server stdlib ; formulaire + `POST /api/plan`, param `engine=auto|beam|mcts`)
 - Bench qualité de route (rate = valeur/écran, greedy/beam/mcts) : `python3 scripts/bench_routes.py`
+- Simulation de dépletion (l'adaptatif anti-bot bat-il le moteur aveugle ?) : `python3 scripts/sim_depletion.py`
 - Régénérer la table `engine=auto` (moteur+λ choisis selon le régime de niveaux ; **à refaire après
   toute reconstruction du dataset**) : `python3 scripts/bench_routes.py --emit-policy > data/engine_policy.json`
 - Reconstruire le dataset (ordre impératif) :
@@ -44,6 +45,11 @@ La mémoire projet prime sur ce fichier pour l'état courant :
   `data/engine_policy.json` (générée par `bench_routes.py --emit-policy`, objectif = vitesse %XP/écran).
   Lookup pur/déterministe, repli sur beam/λ=1 si table absente/clé manquante/tout-200. L'UI le
   ré-évalue à chaque case (niveaux courants). Le défaut UI est désormais `auto`.
+- **Disponibilité adaptative (anti-bot)** : facteur `a∈(0,1]` par map (défaut 1), appris par EWMA des
+  signalements du joueur (`AVAILABILITY_ALPHA=0.20`, `ewma_update`). `_cell_value` multiplie la **valeur
+  de décision** par `a` ⇒ beam/mcts/find/auto en héritent par le seul chemin partagé. UI : bouton
+  **Vide** (obs=0, `a×0.8`, ne récolte pas) à côté de Suivant (obs=1, remonte) / Sauter (obs neutre) ;
+  persistance `localStorage` `dofusjobs.avail.v1`, posté dans `state` de `/api/plan`. Détail en mémoire.
 - `dofusjobs/optimizer.py` = **legacy à pods, NON utilisé par l'UI** ; ne pas y revenir sans demande
   explicite.
 - Reste : `models.py`, `mapgraph.py` (graphe de vraies maps + BFS borné), `leveling.py` (table XP),
@@ -61,6 +67,12 @@ La mémoire projet prime sur ce fichier pour l'état courant :
   les ~5-7 ressources non couvertes par dofus-map = compte DofusDB `resourcesBySubarea` étalé sur les
   maps `worldMap=1` de la sous-zone, `(0,0)` exclu, dédup des sous-zones qui se chevauchent,
   apportionnement au prorata de la part surface.
+- **Disponibilité n'escompte QUE la valeur, jamais le voyage** : `λ·voyage` n'est jamais multiplié par
+  `a` ⇒ une map à `a` faible **sur le chemin** (`travel≈0`) reste récoltée gratuitement ; seul le
+  *détour* vers une map botée est découragé. Le **XP réellement banké** (items / `harvest_coord` /
+  `advance`) reste **plein** — `a` n'escompte que l'espérance de décision/aperçu. Dispo vide/tout-1 =
+  **no-op byte-identique**. La planif est **pure** (ne mute pas le dict de dispo). Pas de seuil
+  d'exclusion (`a` reste > 0). Tests : `tests/test_availability.py`.
 - **Stdlib only** au runtime ; tests en `unittest`.
 - Déterminisme : départ libre ancré dans la plus riche composante connexe ; sorties stables.
 

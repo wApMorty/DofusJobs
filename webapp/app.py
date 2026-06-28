@@ -26,6 +26,7 @@ from dofusjobs import (  # noqa: E402
     JOB_LABELS_FR,
     FarmLoopFinder,
     JobXpTable,
+    ewma_update,
     load_dataset,
     resolve_engine,
 )
@@ -72,11 +73,36 @@ def _finder() -> FarmLoopFinder:
     return _FINDER["obj"]
 
 
+def _ckey(coord) -> str:
+    """Canonical "x,y" string key for the client-side availability dict."""
+    return f"{int(coord[0])},{int(coord[1])}"
+
+
+def _avail_to_coords(avail: dict) -> dict:
+    """Turn the client's {"x,y": a} availability map into the engine's
+    {(x, y): a} form, dropping any malformed key (=> that map keeps a=1.0)."""
+    out = {}
+    for k, v in (avail or {}).items():
+        try:
+            xs, ys = str(k).split(",")
+            out[(int(xs), int(ys))] = float(v)
+        except (ValueError, AttributeError):
+            continue
+    return out
+
+
 def plan(payload: dict) -> dict:
     """Interactive rolling planner: returns the next ``horizon`` maps from the
     current state, re-planned each call (beam lookahead). The client passes the
-    opaque ``state`` back, plus an optional ``commit`` (the map it just did or
-    skipped); the server applies it and re-plans."""
+    opaque ``state`` back, plus an optional ``commit`` (the map it just did,
+    skipped, or reported empty); the server applies it and re-plans.
+
+    ``state.availability`` is the learned {"x,y": a} bot-depletion map (a in (0,1],
+    default 1.0): an ``advance`` commit harvested the map (observation 1, a recovers),
+    an ``empty`` commit reported it botted (observation 0, a decays by x0.8 and the
+    map is NOT advanced onto), a ``skip`` is "not now" and leaves a untouched. The
+    discount only lowers a map's routing value, never the travel cost, so a low-a
+    map already on the path is still harvested for free."""
     f = _finder()
     horizon = max(1, min(40, int(payload.get("horizon", 20))))
     lam = float(payload.get("lambda_travel", 1.0))
@@ -87,20 +113,32 @@ def plan(payload: dict) -> dict:
     if not st:                                   # session start
         levels = payload.get("job_levels", {})
         job_xp = {j: _XP_TABLE.xp_for_level(int(levels.get(j, 1))) for j in GATHERING_JOBS}
-        pos, visited = None, []
+        # Seed the learned availability from the client's persisted map so even the
+        # first window of a fresh session already avoids chronically-botted maps.
+        pos, visited, avail = None, [], dict(payload.get("availability") or {})
     else:
         job_xp = {j: int(st.get("job_xp", {}).get(j, 0)) for j in GATHERING_JOBS}
         pos = st.get("pos")
         visited = list(st.get("visited", []))
+        avail = dict(st.get("availability") or {})   # {"x,y": a}, persists across laps
         commit = payload.get("commit")
         if commit and commit.get("coord") is not None:
             coord = [int(commit["coord"][0]), int(commit["coord"][1])]
-            if commit.get("harvest"):            # advance: harvest this map, move onto it
+            key = _ckey(coord)
+            kind = commit.get("kind")
+            if kind is None:                     # back-compat: harvest bool -> advance/skip
+                kind = "advance" if commit.get("harvest") else "skip"
+            if kind == "advance":                # harvested full => observation 1
                 job_xp, visited = f.advance(job_xp, visited, coord)
                 pos = coord
-            else:
-                visited.append(coord)            # skip: just don't suggest it again
+                avail[key] = ewma_update(avail.get(key, 1.0), 1.0)
+            elif kind == "empty":                # botted/empty => observation 0, don't advance
+                visited.append(coord)            # not re-suggested this lap; a persists
+                avail[key] = ewma_update(avail.get(key, 1.0), 0.0)
+            else:                                # skip: "not now", no observation
+                visited.append(coord)
 
+    availability = _avail_to_coords(avail)
     levels_now = {j: _XP_TABLE.level_for_xp(job_xp[j]) for j in GATHERING_JOBS}
     auto = None
     if raw_engine == "auto":                     # pick engine + lambda from the levels
@@ -111,13 +149,15 @@ def plan(payload: dict) -> dict:
 
     if engine == "mcts":
         window = f.plan_window_mcts(pos, job_xp, visited, horizon=horizon,
-                                    metric=metric, lambda_travel=lam)
+                                    metric=metric, lambda_travel=lam,
+                                    availability=availability)
     else:
         window = f.plan_window(pos, job_xp, visited, horizon=horizon,
-                               metric=metric, lambda_travel=lam)
+                               metric=metric, lambda_travel=lam,
+                               availability=availability)
     return {
         "window": window,
-        "state": {"pos": pos, "job_xp": job_xp, "visited": visited},
+        "state": {"pos": pos, "job_xp": job_xp, "visited": visited, "availability": avail},
         "levels": levels_now,
         "metric": metric,
         "engine": engine,
