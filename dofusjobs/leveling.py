@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+from bisect import bisect_right
 from typing import Dict, List
 
 _DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
@@ -54,15 +55,17 @@ class JobXpTable:
         return thr
 
     def level_for_xp(self, xp: int) -> int:
-        """Highest level whose cumulative threshold is <= xp (clamped 1..max)."""
+        """Highest level whose cumulative threshold is <= xp (clamped 1..max).
+
+        ``thresholds`` is non-decreasing, so this is a binary search: the result
+        is ``bisect_right(thresholds, xp) - 1`` clamped to ``[1, max_level]``.
+        (Called millions of times in the rollout-heavy planners, hence bisect
+        rather than a linear scan.)"""
         xp = max(0, int(xp))
-        lvl = 1
-        for L in range(1, self.max_level + 1):
-            if self.thresholds[L] <= xp:
-                lvl = L
-            else:
-                break
-        return lvl
+        lvl = bisect_right(self.thresholds, xp) - 1
+        if lvl < 1:
+            return 1
+        return lvl if lvl < self.max_level else self.max_level
 
     def xp_for_level(self, level: int) -> int:
         """Cumulative XP at the start of ``level``."""

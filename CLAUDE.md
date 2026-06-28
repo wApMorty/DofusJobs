@@ -20,9 +20,10 @@ La mémoire projet prime sur ce fichier pour l'état courant :
 - Une fiche peut être périmée : vérifier qu'un fichier/fonction cité existe encore avant de s'en servir.
 
 ## Commandes
-- Tests (porte verte obligatoire) : `python3 -m unittest discover -s tests`  *(42 tests)*
+- Tests (porte verte obligatoire) : `python3 -m unittest discover -s tests`  *(48 tests)*
 - CLI : `python3 -m dofusjobs`
-- Web : `python3 webapp/app.py` (http.server stdlib ; formulaire + `POST /api/route`, `/api/plan`)
+- Web : `python3 webapp/app.py` (http.server stdlib ; formulaire + `POST /api/plan`, param `engine=beam|mcts`)
+- Bench qualité de route (rate = valeur/écran, greedy/beam/mcts) : `python3 scripts/bench_routes.py`
 - Reconstruire le dataset (ordre impératif) :
   `python3 scripts/build_dofusmap_counts.py` **puis** `python3 scripts/build_dofusdb_dataset.py`
 
@@ -30,6 +31,12 @@ La mémoire projet prime sur ce fichier pour l'état courant :
 - Moteur **primaire** : `dofusjobs/farmloop.py` (`FarmLoopFinder`, `plan_farm_route`, `plan_window`)
   — modèle **v4 SANS pods**, score = Σ %XP par map − λ·voyage, route gloutonne + simulation des
   montées de niveau + récolte « au passage ».
+- **Planificateur MCTS/UCT** : `plan_window_mcts` (à côté de `plan_window`, jamais en remplacement —
+  le beam reste le défaut et le repli). **Max-backup** (déterministe ⇒ on propage la meilleure route,
+  pas une moyenne), récompense = **valeur à budget d'écrans fixe − λ·écrans** (orienteering budgété ;
+  un rate brut ou une somme non bornée échouent — voir mémoire), rollout glouton plafonné, branchement
+  limité. Garantie ≥ greedy par décision (rollout de Bertsekas). UI : `engine=mcts`. Détail/pièges en
+  mémoire (`dofusjobs-project.md`).
 - `dofusjobs/optimizer.py` = **legacy à pods, NON utilisé par l'UI** ; ne pas y revenir sans demande
   explicite.
 - Reste : `models.py`, `mapgraph.py` (graphe de vraies maps + BFS borné), `leveling.py` (table XP),

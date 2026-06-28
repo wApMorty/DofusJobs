@@ -2,7 +2,8 @@
 
 Routes:
   GET  /                 -> input form (level per job, lambda, metric)
-  POST /api/plan         -> JSON {job_levels|state, horizon, lambda_travel, metric}
+  POST /api/plan         -> JSON {job_levels|state, horizon, lambda_travel, metric,
+                            engine: "beam"(default)|"mcts"}
                             -> next window of the interactive rolling planner
   GET  /healthz          -> "ok"
 
@@ -55,9 +56,19 @@ def render_index() -> str:
 _XP_TABLE = JobXpTable.load()
 
 
+_FINDER = {"obj": None}
+
+
 def _finder() -> FarmLoopFinder:
-    resources, cells, maps = get_data()
-    return FarmLoopFinder(resources, cells, maps=maps, xp_table=_XP_TABLE)
+    """A single shared finder, reused across requests. The dataset and travel
+    graph are immutable and the graph's BFS results are pure memoisation, so
+    sharing one instance warms the distance cache across calls (a big speed-up
+    for the rollout-heavy MCTS engine) and is safe under the GIL (the caches are
+    append-only)."""
+    if _FINDER["obj"] is None:
+        resources, cells, maps = get_data()
+        _FINDER["obj"] = FarmLoopFinder(resources, cells, maps=maps, xp_table=_XP_TABLE)
+    return _FINDER["obj"]
 
 
 def plan(payload: dict) -> dict:
@@ -69,6 +80,7 @@ def plan(payload: dict) -> dict:
     horizon = max(1, min(40, int(payload.get("horizon", 20))))
     lam = float(payload.get("lambda_travel", 1.0))
     metric = "xp" if payload.get("metric") == "xp" else "levels"
+    engine = "mcts" if payload.get("engine") == "mcts" else "beam"
 
     st = payload.get("state")
     if not st:                                   # session start
@@ -88,13 +100,18 @@ def plan(payload: dict) -> dict:
             else:
                 visited.append(coord)            # skip: just don't suggest it again
 
-    window = f.plan_window(pos, job_xp, visited, horizon=horizon,
-                           metric=metric, lambda_travel=lam)
+    if engine == "mcts":
+        window = f.plan_window_mcts(pos, job_xp, visited, horizon=horizon,
+                                    metric=metric, lambda_travel=lam)
+    else:
+        window = f.plan_window(pos, job_xp, visited, horizon=horizon,
+                               metric=metric, lambda_travel=lam)
     return {
         "window": window,
         "state": {"pos": pos, "job_xp": job_xp, "visited": visited},
         "levels": {j: _XP_TABLE.level_for_xp(job_xp[j]) for j in GATHERING_JOBS},
         "metric": metric,
+        "engine": engine,
         "done": not window,
         "job_labels": JOB_LABELS_FR,
     }

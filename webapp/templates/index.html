@@ -61,7 +61,7 @@
 <body>
 <header>
   <h1><span>DofusJobs</span> — optimiseur de leveling récolte</h1>
-  <div class="sub">Saisis tes niveaux par métier. Chaque map est <b>notée par la somme de %XP</b> qu'elle te rapporte, et la route suit le meilleur <b>score par écran</b> — sans contrainte de pods, en récoltant chaque map entièrement et en simulant les paliers. Les bas métiers pèsent plus (un niveau est moins cher) → ils sont priorisés, jusqu'à monter tout vers 200.</div>
+  <div class="sub">Saisis tes niveaux par métier. Chaque map est <b>notée par la somme de %XP</b> qu'elle te rapporte (sans contrainte de pods, en récoltant chaque map entièrement et en simulant les paliers). Le moteur <b>beam search</b> regarde plusieurs cases d'avance ; le moteur <b>MCTS</b> simule des routes entières pour anticiper encore plus loin. Les bas métiers pèsent plus (un niveau est moins cher) → ils sont priorisés, jusqu'à monter tout vers 200.</div>
 </header>
 <main>
   <form id="form" class="card">
@@ -74,6 +74,14 @@
         <option value="xp">Par XP brut (favorise les ressources abondantes)</option>
       </select>
       <div class="hint">« Par niveau » privilégie les métiers bas (un haut niveau rapporte peu de % de level) → monte tout en parallèle.</div>
+    </div>
+    <div class="field">
+      <label>Moteur de planification</label>
+      <select name="engine" id="engine">
+        <option value="beam">Beam search — rapide (~0,1 s/case)</option>
+        <option value="mcts">MCTS — recherche arborescente, anticipe plus loin (~0,8 s/case)</option>
+      </select>
+      <div class="hint">Le MCTS (famille AlphaZero, sans réseau) simule des routes au lieu de suivre bêtement le meilleur écran ; plus lent mais regarde plus loin.</div>
     </div>
     <div class="field">
       <label>λ — poids du déplacement (%XP par écran)</label>
@@ -106,6 +114,7 @@ function saveForm() {
       levels,
       lambda: form.lambda_travel.value,
       metric: document.getElementById('metric').value,
+      engine: document.getElementById('engine').value,
     }));
   } catch (e) { /* private mode / quota: never break the app */ }
 }
@@ -121,6 +130,7 @@ function loadForm() {
     });
     if (saved.lambda != null) form.lambda_travel.value = saved.lambda;
     if (saved.metric != null) document.getElementById('metric').value = saved.metric;
+    if (saved.engine != null) document.getElementById('engine').value = saved.engine;
   } catch (e) { /* corrupt/blocked storage: fall back to server defaults */ }
 }
 
@@ -161,6 +171,7 @@ form.addEventListener('submit', async (e) => {
     job_levels,
     lambda_travel: Number(form.lambda_travel.value || 0),
     metric: document.getElementById('metric').value,
+    engine: document.getElementById('engine').value,
   };
   saveForm();                      // remember this config for next visit
   sess = null;                     // fresh rolling session for the new search
