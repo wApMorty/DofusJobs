@@ -11,8 +11,9 @@ Outputs (data/):
                     [{resource_id, quantity}]. Placement uses the REAL per-map
                     positions from dofus-map (data/dofusmap_counts.json, built by
                     build_dofusmap_counts.py), intersected with the worldMap=1
-                    surface and capped at PER_MAP_CAP. The ~7 resources dofus-map
-                    doesn't cover fall back to a sub-area spread of the DofusDB count.
+                    surface, with NO per-map cap (real field density is preserved —
+                    e.g. wheat reaches ~26/map). The ~7 resources dofus-map doesn't
+                    cover fall back to a sub-area spread of the DofusDB count.
 
 All data is authoritative DofusDB except base_xp (community-calibrated:
 xp ≈ 7 + 0.36*level, anchored on next-stage wood values) — DofusDB has no
@@ -33,10 +34,10 @@ TYPE_JOB = {34: "farmer", 35: "herbalist", 36: "herbalist", 38: "lumberjack",
 
 # Real per-map resource positions (dofus-map, groupId=0). See build_dofusmap_counts.py.
 DM_COUNTS = os.path.join(DATA, "dofusmap_counts.json")
-# dofus-map's groupId=0 projects interior spawns onto surface entrance coords, so a
-# few hub coords get inflated counts. Cap per-map quantity (presence is what matters
-# for routing; the count only weights the grab).
-PER_MAP_CAP = 10
+# No per-map cap: the real dofus-map count is kept as-is so legit field density
+# (e.g. wheat ~26/map for the Paysan) survives. A few fish/ore "hubs" carry inflated
+# counts (interior spawns projected onto entrance coords) — accepted as the price of
+# faithful field densities.
 # DofusDB names the wood ("Bois de Frêne"); dofus-map names the tree ("Frêne"). A few
 # resources also differ by common name.
 DM_EXTRA = {"Crabe Sourimi": "crabe", "Raie Bleue": "raie"}
@@ -182,8 +183,8 @@ def main():
     n_placed = n_absent = n_dm = 0
     for rid, meta in resources.items():
         # PRIMARY: real per-map positions from dofus-map (which map actually bears the
-        # resource), intersected with our worldMap=1 surface graph and capped to tame
-        # the inflated interior-entrance hubs. This is what makes a recommended map
+        # resource), intersected with our worldMap=1 surface graph, kept at their real
+        # count (no cap) so field density survives. This is what makes a recommended map
         # actually hold the announced resource in-game.
         dmc = None
         for key in dofusmap_slugs(meta["name"]):
@@ -199,7 +200,7 @@ def main():
                     continue
                 if (x, y) not in coords:        # keep only surface (worldMap=1) maps
                     continue
-                q = min(int(cnt), PER_MAP_CAP)
+                q = int(cnt)
                 if q > 0:
                     cell_res[(x, y)][rid] = cell_res[(x, y)].get(rid, 0) + q
                     placed = True
