@@ -254,9 +254,12 @@ def main():
 
     # Strip subareas from the saved catalog (keep it lean).
     cat = {rid: {k: v for k, v in m.items() if k != "subareas"} for rid, m in resources.items()}
-    json.dump({"resources": list(cat.values())}, open(os.path.join(DATA, "resources.json"), "w"), ensure_ascii=False, indent=0)
-    json.dump({"maps": [[x, y] for (x, y) in sorted(coords)]}, open(os.path.join(DATA, "world_maps.json"), "w"))
-    json.dump({"cells": cells}, open(os.path.join(DATA, "world_cells.json"), "w"), ensure_ascii=False)
+    # encoding="utf-8" is mandatory: with ensure_ascii=False the JSON holds raw
+    # accented chars (e.g. "Ble"), and without it Windows would write them in
+    # cp1252, producing files that load_dataset() (UTF-8) cannot decode.
+    json.dump({"resources": list(cat.values())}, open(os.path.join(DATA, "resources.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=0)
+    json.dump({"maps": [[x, y] for (x, y) in sorted(coords)]}, open(os.path.join(DATA, "world_maps.json"), "w", encoding="utf-8"))
+    json.dump({"cells": cells}, open(os.path.join(DATA, "world_cells.json"), "w", encoding="utf-8"), ensure_ascii=False)
     print(f"\nDONE. resources={len(cat)} maps={len(coords)} cells={len(cells)}")
 
 
