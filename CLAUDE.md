@@ -40,9 +40,13 @@ La mémoire projet prime sur ce fichier pour l'état courant :
 - **Pénalité de voyage invariante en niveau** : pour la métrique `levels`, λ·voyage est converti en
   %-de-niveau au XP courant ⇒ test garde/skip ≈ `gain_xp > λ·voyage` (régression :
   `test_levels_metric_does_not_stall_at_high_level`). Ne pas comparer un λ·voyage brut à des %.
-- **Build dataset SANS seuils ni caps** : placement = comptes DofusDB `resourcesBySubarea` étalés sur
-  les maps `worldMap=1` de la sous-zone ; `(0,0)` exclu ; dédup des sous-zones qui se chevauchent ;
-  apportionnement au prorata de la part surface. dofus-map **abandonné pour le placement**.
+- **Build dataset SANS seuils ni caps** : placement primaire = positions case-par-case **dofus-map**
+  (`data/dofusmap_counts.json`), intersectées avec la surface `worldMap=1`, comptes **bruts** (le cap
+  `PER_MAP_CAP=10` a été retiré le 2026-06-28 — il écrasait la densité réelle des champs Paysan ; on
+  accepte en contrepartie les hubs poisson/mine bruts, projections de spawns d'intérieur). Repli pour
+  les ~5-7 ressources non couvertes par dofus-map = compte DofusDB `resourcesBySubarea` étalé sur les
+  maps `worldMap=1` de la sous-zone, `(0,0)` exclu, dédup des sous-zones qui se chevauchent,
+  apportionnement au prorata de la part surface.
 - **Stdlib only** au runtime ; tests en `unittest`.
 - Déterminisme : départ libre ancré dans la plus riche composante connexe ; sorties stables.
 
