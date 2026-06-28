@@ -94,6 +94,36 @@ const form = document.getElementById('form');
 const resultEl = document.getElementById('result');
 let sess = null, sessParams = null, liveHorizon = 20;   // live rolling planner
 
+// Remember the form config across visits (browser localStorage, no server,
+// no dependency). Versioned key so the schema can be invalidated cleanly.
+const STORE_KEY = 'dofusjobs.form.v1';
+
+function saveForm() {
+  try {
+    const levels = {};
+    JOBS.forEach(j => levels[j] = Number(form.querySelector(`[name=lvl_${j}]`).value || 0));
+    localStorage.setItem(STORE_KEY, JSON.stringify({
+      levels,
+      lambda: form.lambda_travel.value,
+      metric: document.getElementById('metric').value,
+    }));
+  } catch (e) { /* private mode / quota: never break the app */ }
+}
+
+function loadForm() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    const levels = saved.levels || {};
+    JOBS.forEach(j => {
+      if (levels[j] != null) form.querySelector(`[name=lvl_${j}]`).value = levels[j];
+    });
+    if (saved.lambda != null) form.lambda_travel.value = saved.lambda;
+    if (saved.metric != null) document.getElementById('metric').value = saved.metric;
+  } catch (e) { /* corrupt/blocked storage: fall back to server defaults */ }
+}
+
 async function copyText(text) {
   try {
     if (navigator.clipboard && window.isSecureContext) {
@@ -132,6 +162,7 @@ form.addEventListener('submit', async (e) => {
     lambda_travel: Number(form.lambda_travel.value || 0),
     metric: document.getElementById('metric').value,
   };
+  saveForm();                      // remember this config for next visit
   sess = null;                     // fresh rolling session for the new search
   try {
     await startLive();
@@ -237,6 +268,8 @@ function renderLive() {
   panel.querySelector('[data-act=next]').addEventListener('click', () => liveStep(true));
   panel.querySelector('[data-act=skip]').addEventListener('click', () => liveStep(false));
 }
+
+loadForm();   // pre-fill from the last saved config (DOM is ready: script is at end of body)
 </script>
 </body>
 </html>
