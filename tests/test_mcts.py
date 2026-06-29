@@ -38,7 +38,7 @@ def _roll_rate(f, plan, job_xp, k=12):
 
 class MctsContractTest(unittest.TestCase):
     def _finder(self):
-        res = [Resource("w", "W", "lumberjack", 20, 1, 1, 5)]
+        res = [Resource("w", "W", "lumberjack", 20, 1)]
         cells = [cell(f"c{i}", (i, 0), ("w", 5)) for i in range(6)]
         return finder(res, cells)
 
@@ -75,7 +75,7 @@ class MctsContractTest(unittest.TestCase):
     def test_inlines_crossed_maps_as_steps(self):
         # A small resource map between two rich endpoints must surface as its own
         # explicit step (same flattening as the beam), not a silent pick-up.
-        a = Resource("a", "A", "miner", 20, 1, 1, 1)
+        a = Resource("a", "A", "miner", 20, 1)
         cells = [cell("s", (0, 0), ("a", 10)), cell("e", (5, 0), ("a", 10)),
                  cell("m", (2, 0), ("a", 3))]
         f = finder([a], cells)
@@ -88,7 +88,7 @@ class MctsContractTest(unittest.TestCase):
 
 class MctsQualityTest(unittest.TestCase):
     def test_no_eligible_returns_empty(self):
-        gated = Resource("hi", "Hi", "miner", 30, 200, 200, 1)
+        gated = Resource("hi", "Hi", "miner", 30, 200)
         f = finder([gated], [cell("a", (0, 0), ("hi", 5))])
         w = f.plan_window_mcts(None, {j: f.xp_table.xp_for_level(1) for j in GATHERING_JOBS},
                                [], horizon=5, simulations=100)
@@ -97,8 +97,8 @@ class MctsQualityTest(unittest.TestCase):
     def test_not_worse_than_beam(self):
         # On a fixed 2-D field with travel costs, MCTS (lookahead by simulation)
         # must be at least as fast (value per screen) as the beam.
-        res = [Resource("w", "W", "lumberjack", 20, 1, 1, 5),
-               Resource("o", "O", "miner", 18, 1, 1, 5)]
+        res = [Resource("w", "W", "lumberjack", 20, 1),
+               Resource("o", "O", "miner", 18, 1)]
         cells = [cell(f"c{x}_{y}", (x, y), ("w", 6) if (x + y) % 2 == 0 else ("o", 6))
                  for x in range(5) for y in range(3)]
         f = finder(res, cells)

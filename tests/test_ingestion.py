@@ -20,7 +20,6 @@ class RealDatasetTest(unittest.TestCase):
             self.assertIn(r.job_id, GATHERING_JOBS)
             self.assertGreaterEqual(r.base_xp, 1)
             self.assertGreaterEqual(r.required_level, 1)
-            self.assertGreaterEqual(r.pods, 1)
 
     def test_all_five_jobs_present(self):
         jobs = {r.job_id for r in load_resources().values()}

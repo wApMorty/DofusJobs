@@ -20,7 +20,7 @@ La mémoire projet prime sur ce fichier pour l'état courant :
 - Une fiche peut être périmée : vérifier qu'un fichier/fonction cité existe encore avant de s'en servir.
 
 ## Commandes
-- Tests (porte verte obligatoire) : `python3 -m unittest discover -s tests`  *(77 tests)*
+- Tests (porte verte obligatoire) : `python3 -m unittest discover -s tests`  *(62 tests)*
 - CLI : `python3 -m dofusjobs`
 - Web : `python3 webapp/app.py` (http.server stdlib ; formulaire + `POST /api/plan`, param `engine=auto|beam|mcts`)
 - Bench qualité de route (rate = valeur/écran, greedy/beam/mcts) : `python3 scripts/bench_routes.py`
@@ -50,8 +50,8 @@ La mémoire projet prime sur ce fichier pour l'état courant :
   de décision** par `a` ⇒ beam/mcts/find/auto en héritent par le seul chemin partagé. UI : bouton
   **Vide** (obs=0, `a×0.8`, ne récolte pas) à côté de Suivant (obs=1, remonte) / Sauter (obs neutre) ;
   persistance `localStorage` `dofusjobs.avail.v1`, posté dans `state` de `/api/plan`. Détail en mémoire.
-- `dofusjobs/optimizer.py` = **legacy à pods, NON utilisé par l'UI** ; ne pas y revenir sans demande
-  explicite.
+- Le legacy v2 à pods (`optimizer.py`, `plan_route`, types `PlayerInput`/`RouteResult`, etc.) a été
+  **supprimé le 2026-06-29** (audit ponytail). Le modèle `Resource` n'a plus `pods`/`resource_level`.
 - Reste : `models.py`, `mapgraph.py` (graphe de vraies maps + BFS borné), `leveling.py` (table XP),
   `ingestion.py`, `webapp/app.py`.
 

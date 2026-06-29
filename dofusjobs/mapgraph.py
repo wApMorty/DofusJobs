@@ -17,7 +17,6 @@ from collections import deque
 from typing import Dict, Iterable, Optional, Set, Tuple
 
 Coord = Tuple[int, int]
-_UNREACHABLE = 1 << 20
 
 # Dofus world convention: +x = Est (→), -x = Ouest (←), +y = Sud (↓), -y = Nord (↑).
 _DIR_ARROW: Dict[Tuple[int, int], str] = {
@@ -136,22 +135,3 @@ class MapGraph:
             path.append(prev[path[-1]])
         path.reverse()
         return path
-
-    def directions(self, a: Coord, b: Coord) -> list:
-        """Compact arrow step directions from ``a`` to ``b`` (see
-        ``path_directions``); ``["saut (zaap/bateau)"]`` if disconnected."""
-        path = self.shortest_path(a, b)
-        if path is None:
-            return ["saut (zaap/bateau)"]
-        return path_directions(path)
-
-    def travel_cost(self, a: Coord, b: Coord) -> int:
-        a = (int(a[0]), int(a[1])); b = (int(b[0]), int(b[1]))
-        if a == b:
-            return 0
-        d = self.distances_from(a).get(b)
-        if d is not None:
-            return d
-        # Different connected components (e.g. islands reached by boat/zaap):
-        # fall back to Manhattan so the optimizer still has a finite cost.
-        return abs(a[0] - b[0]) + abs(a[1] - b[1]) + _UNREACHABLE

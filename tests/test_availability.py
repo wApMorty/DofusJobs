@@ -88,10 +88,10 @@ class EwmaTest(unittest.TestCase):
 
 class DiscountTest(unittest.TestCase):
     def _cellval(self, f, avail):
-        return f._cell_value(f.cells[0], levels1(), xp1(f), "levels", {}, availability=avail)[0]
+        return f._cell_value(f.cells[0], levels1(), xp1(f), "levels", availability=avail)[0]
 
     def test_value_scaled_by_availability(self):
-        f = finder([Resource("w", "W", "lumberjack", 20, 1, 1, 5)],
+        f = finder([Resource("w", "W", "lumberjack", 20, 1)],
                    [cell("a", (0, 0), ("w", 10))])
         full = self._cellval(f, None)
         self.assertGreater(full, 0)
@@ -103,8 +103,8 @@ class DiscountTest(unittest.TestCase):
     def test_anchor_follows_discounted_value(self):
         # Two islands: a rich one and a poor one. Undiscounted the free start
         # anchors in the rich island; decaying the rich map flips the anchor.
-        poor = Resource("p", "P", "miner", 10, 1, 1, 1)
-        rich = Resource("r", "R", "miner", 10, 1, 1, 1)
+        poor = Resource("p", "P", "miner", 10, 1)
+        rich = Resource("r", "R", "miner", 10, 1)
         cells = [cell("isle", (0, 0), ("p", 5)), cell("main", (50, 0), ("r", 80))]
         maps = [(0, y) for y in (-1, 0, 1)] + [(50, y) for y in (-1, 0, 1)]
         f = finder([poor, rich], cells, maps=maps)
@@ -120,7 +120,7 @@ class FreePickupTest(unittest.TestCase):
         # (1,0) has a near-zero availability so it is never a DETOUR target, but it
         # lies on the BFS path (2,0)->(0,0); the travel penalty is not discounted,
         # so it is still harvested as a free on-the-way pickup.
-        res = [Resource("w", "W", "lumberjack", 20, 1, 1, 5)]
+        res = [Resource("w", "W", "lumberjack", 20, 1)]
         cells = [cell("c0", (0, 0), ("w", 5)), cell("c1", (1, 0), ("w", 5)),
                  cell("c2", (2, 0), ("w", 5))]
         f = finder(res, cells)
@@ -136,7 +136,7 @@ class FreePickupTest(unittest.TestCase):
         self.assertEqual(avail, {(1, 0): 0.001})
 
     def test_planning_does_not_mutate_availability(self):
-        res = [Resource("w", "W", "lumberjack", 20, 1, 1, 5)]
+        res = [Resource("w", "W", "lumberjack", 20, 1)]
         cells = [cell(f"c{i}", (i, 0), ("w", 5)) for i in range(4)]
         f = finder(res, cells)
         avail = {(1, 0): 0.3, (2, 0): 0.7}
@@ -148,7 +148,7 @@ class FreePickupTest(unittest.TestCase):
 
 class BackwardCompatTest(unittest.TestCase):
     def _f(self):
-        res = [Resource("w", "W", "lumberjack", 20, 1, 1, 5)]
+        res = [Resource("w", "W", "lumberjack", 20, 1)]
         cells = [cell(f"c{i}", (i, 0), ("w", 5)) for i in range(5)]
         return finder(res, cells)
 
@@ -184,7 +184,7 @@ class ApiCommitKindsTest(unittest.TestCase):
     def setUp(self):
         import webapp.app as appmod
         self.app = appmod
-        res = [Resource("w", "W", "lumberjack", 20, 1, 1, 5)]
+        res = [Resource("w", "W", "lumberjack", 20, 1)]
         cells = [cell(f"c{i}", (i, 0), ("w", 5)) for i in range(3)]
         self.f = finder(res, cells)
         self._saved = appmod._FINDER["obj"]

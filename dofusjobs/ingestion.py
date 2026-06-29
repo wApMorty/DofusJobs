@@ -38,8 +38,7 @@ def load_resources(path: str | None = None) -> Dict[str, Resource]:
             res = Resource(
                 resource_id=str(row["resource_id"]), name=str(row["name"]),
                 job_id=str(row["job"]), base_xp=int(row["base_xp"]),
-                resource_level=int(row["resource_level"]),
-                required_level=int(row["required_level"]), pods=int(row["pods"]))
+                required_level=int(row["required_level"]))
         except (KeyError, TypeError, ValueError) as exc:
             _log(f"dropped resource row (parse error: {exc}): {row!r}")
             continue

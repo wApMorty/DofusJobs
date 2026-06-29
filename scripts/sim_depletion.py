@@ -43,8 +43,8 @@ def _fixture():
     catalog value lures the route up the branch every lap for almost no real
     yield. Returns (finder, hub_coord, empty_prob_by_coord)."""
     res = {
-        "field": Resource("field", "Frene", "lumberjack", 18, 1, 1, 5),
-        "rich": Resource("rich", "Chene", "lumberjack", 18, 1, 1, 5),
+        "field": Resource("field", "Frene", "lumberjack", 18, 1),
+        "rich": Resource("rich", "Chene", "lumberjack", 18, 1),
     }
     cells = [Cell(f"f{x}", (x, 0), (CellResource("field", 4),)) for x in range(5)]
     cells.append(Cell("hub", _HUB, (CellResource("rich", 120),)))   # dense bot magnet

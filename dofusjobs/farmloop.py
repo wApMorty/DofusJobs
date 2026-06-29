@@ -158,15 +158,11 @@ class FarmLoopFinder:
             self.graph = MapGraph(nodes)
 
     # ---- per-map value (job-weighted %-of-a-level; no pods) -------------------
-    def _cell_value(self, cell: Cell, job_levels, job_xp, metric, weights,
-                    only_job=None, availability=None):
+    def _cell_value(self, cell: Cell, job_levels, job_xp, metric, availability=None):
         total = 0.0
-        per = {}
         items = []
         for cr in cell.resources:
             r = self.resources[cr.resource_id]
-            if only_job and r.job_id != only_job:
-                continue
             if job_levels.get(r.job_id, 0) < r.required_level:
                 continue
             gain_xp = r.base_xp * cr.quantity
@@ -176,20 +172,17 @@ class FarmLoopFinder:
                 b = self.xp_table.level_progress(job_xp[r.job_id])
                 a = self.xp_table.level_progress(job_xp[r.job_id] + gain_xp)
                 g = 100.0 * (a - b)
-            g *= weights.get(r.job_id, 1.0)
             total += g
-            per[r.job_id] = per.get(r.job_id, 0.0) + g
             items.append({"resource_id": r.resource_id, "resource_name": r.name,
                           "job_id": r.job_id, "quantity": cr.quantity, "xp": r.base_xp})
-        # Discount the DECISION value (total/per) by the map's learned availability,
-        # so botted hub maps lose their routing dominance; ``items`` (the realized
-        # XP that gets banked on a real harvest) is left at full value on purpose.
+        # Discount the DECISION value by the map's learned availability, so botted
+        # hub maps lose their routing dominance; ``items`` (the realized XP that
+        # gets banked on a real harvest) is left at full value on purpose.
         if availability:
             f = availability.get(cell.world_coords, 1.0)
             if f != 1.0:
                 total *= f
-                per = {k: v * f for k, v in per.items()}
-        return total, per, items
+        return total, items
 
     def _richest_component(self, levels, metric, availability=None):
         """Cells of the connected component with the most total %XP value at
@@ -206,7 +199,7 @@ class FarmLoopFinder:
             i = cc.get(c.world_coords)
             if i is None:
                 continue
-            v, _, _ = self._cell_value(c, levels, job_xp, metric, {}, availability=availability)
+            v, _ = self._cell_value(c, levels, job_xp, metric, availability=availability)
             val[i] += v
         keep = comps[max(range(len(comps)), key=lambda i: val[i])]
         return [c for c in self.cells if c.world_coords in keep]
@@ -245,8 +238,8 @@ class FarmLoopFinder:
             for c, travel in reachable:
                 if c.world_coords in visited:
                     continue
-                v, _per, items = self._cell_value(c, cur_levels, job_xp, metric, {},
-                                                  availability=availability)
+                v, items = self._cell_value(c, cur_levels, job_xp, metric,
+                                            availability=availability)
                 if v <= 0:
                     continue
                 score = v - lam * travel
@@ -317,8 +310,8 @@ class FarmLoopFinder:
             # Availability discounts the displayed value only; ``items`` is harvested
             # at full XP and the map's ``a`` is NOT updated — a transit pickup is an
             # incidental free grab, not a deliberate fullness observation.
-            v, _per, items = self._cell_value(cell, cur_levels, job_xp, metric, {},
-                                              availability=availability)
+            v, items = self._cell_value(cell, cur_levels, job_xp, metric,
+                                        availability=availability)
             if not items and not is_dest:
                 continue                       # nothing eligible here at these levels
             stops.append({"coord": list(co), "directions": path_directions(path[anchor:i + 1]),
@@ -398,8 +391,8 @@ class FarmLoopFinder:
                     travel = 0 if dmap is None else dmap.get(co)
                     if travel is None:        # different component, unreachable on foot
                         continue
-                    v, _p2, items = self._cell_value(c, levels, jx, metric, {},
-                                                     availability=availability)
+                    v, items = self._cell_value(c, levels, jx, metric,
+                                                availability=availability)
                     if v <= 0:
                         continue
                     imm = v - lam * travel
@@ -453,8 +446,8 @@ class FarmLoopFinder:
         for c in pool:
             if c.world_coords in base_visited:
                 continue
-            v, _p, _i = self._cell_value(c, root_levels, job_xp, metric, {},
-                                         availability=availability)
+            v, _i = self._cell_value(c, root_levels, job_xp, metric,
+                                     availability=availability)
             if v > 0:
                 scored0.append((v, c))
         scored0.sort(key=lambda x: -x[0])
@@ -485,7 +478,7 @@ class FarmLoopFinder:
                          top_k: int = 150, simulations: int = 1500,
                          exploration: float = 0.7, rollout_depth: int = 12,
                          rollout_pool: int = 30, branch: int = 6,
-                         screen_budget: int = 35, seed: int = 0, availability=None):
+                         screen_budget: int = 35, availability=None):
         """Monte-Carlo Tree Search (UCT) planner — the AlphaZero search family
         *without* a neural net. It looks ahead by simulating, instead of being
         myopically greedy like the beam.
@@ -514,8 +507,7 @@ class FarmLoopFinder:
 
         The search is fully deterministic — ties broken by ``(score, -travel,
         coord)`` and budget measured in simulations (never wall-clock) — so repeated
-        calls return the same route. ``seed`` is accepted for API symmetry but the
-        coord tie-break makes an RNG unnecessary."""
+        calls return the same route (the coord tie-break makes an RNG unnecessary)."""
         metric = "xp" if metric == "xp" else "levels"
         lam = max(0.0, float(lambda_travel))
         horizon = max(1, int(horizon))
@@ -548,8 +540,8 @@ class FarmLoopFinder:
                 travel = 0 if dmap is None else dmap.get(co)
                 if travel is None:            # different component, unreachable on foot
                     continue
-                v, _p, items = self._cell_value(self.cells_by_coord[co], lv, jx, metric, {},
-                                                availability=availability)
+                v, items = self._cell_value(self.cells_by_coord[co], lv, jx, metric,
+                                            availability=availability)
                 if v <= 0:
                     continue
                 score = v - lam * travel
@@ -570,8 +562,8 @@ class FarmLoopFinder:
                 travel = 0 if dmap is None else dmap.get(co)
                 if travel is None:
                     continue
-                v, _p, items = self._cell_value(self.cells_by_coord[co], lv, jx, metric, {},
-                                                availability=availability)
+                v, items = self._cell_value(self.cells_by_coord[co], lv, jx, metric,
+                                            availability=availability)
                 if v <= 0:
                     continue
                 sc = v - lam * travel

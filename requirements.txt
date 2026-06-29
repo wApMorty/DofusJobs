@@ -1,5 +1,0 @@
-# DofusJobs runs on the Python standard library only (Python >= 3.10).
-# No third-party runtime dependencies — nothing to install.
-#
-# Optional dev tools (not required to run or test):
-#   ruff      # linting
