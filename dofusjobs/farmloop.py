@@ -158,11 +158,17 @@ class FarmLoopFinder:
             self.graph = MapGraph(nodes)
 
     # ---- per-map value (job-weighted %-of-a-level; no pods) -------------------
-    def _cell_value(self, cell: Cell, job_levels, job_xp, metric, availability=None):
+    def _cell_value(self, cell: Cell, job_levels, job_xp, metric, availability=None,
+                    active_jobs=None):
         total = 0.0
         items = []
         for cr in cell.resources:
             r = self.resources[cr.resource_id]
+            # active_jobs=None => every job counts (back-compat). An explicit set
+            # (even empty) selects which jobs to level; deselected jobs contribute
+            # no value and are never harvested, so the route ignores them entirely.
+            if active_jobs is not None and r.job_id not in active_jobs:
+                continue
             if job_levels.get(r.job_id, 0) < r.required_level:
                 continue
             gain_xp = r.base_xp * cr.quantity
@@ -184,7 +190,7 @@ class FarmLoopFinder:
                 total *= f
         return total, items
 
-    def _richest_component(self, levels, metric, availability=None):
+    def _richest_component(self, levels, metric, availability=None, active_jobs=None):
         """Cells of the connected component with the most total %XP value at
         these levels — a walking route can't leave its component (boat/zaap-only
         islands), so anchor in the richest one. Value is the availability-discounted
@@ -199,14 +205,15 @@ class FarmLoopFinder:
             i = cc.get(c.world_coords)
             if i is None:
                 continue
-            v, _ = self._cell_value(c, levels, job_xp, metric, availability=availability)
+            v, _ = self._cell_value(c, levels, job_xp, metric, availability=availability,
+                                    active_jobs=active_jobs)
             val[i] += v
         keep = comps[max(range(len(comps)), key=lambda i: val[i])]
         return [c for c in self.cells if c.world_coords in keep]
 
     def find(self, job_levels: Dict[str, int], metric: str = "levels",
              lambda_travel: float = 1.0, max_stops: int = _MAX_STOPS,
-             availability=None) -> FarmLoopResult:
+             availability=None, active_jobs=None) -> FarmLoopResult:
         """Greedy leveling route (no pods). Each map is scored by the TOTAL
         %-of-a-level it yields — every eligible resource on it, all jobs summed,
         at the current levels. We repeatedly walk to the best score-minus-travel
@@ -220,7 +227,7 @@ class FarmLoopFinder:
         start_xp = dict(job_xp)
         cur_levels = {j: self.xp_table.level_for_xp(job_xp[j]) for j in GATHERING_JOBS}
 
-        comp_cells = self._richest_component(cur_levels, metric, availability)
+        comp_cells = self._richest_component(cur_levels, metric, availability, active_jobs)
         visited: set = set()
         pos: Optional[Coord] = None
         stops: List[LoopStop] = []
@@ -239,7 +246,7 @@ class FarmLoopFinder:
                 if c.world_coords in visited:
                     continue
                 v, items = self._cell_value(c, cur_levels, job_xp, metric,
-                                            availability=availability)
+                                            availability=availability, active_jobs=active_jobs)
                 if v <= 0:
                     continue
                 score = v - lam * travel
@@ -256,7 +263,7 @@ class FarmLoopFinder:
             # becomes its own explicit stop (it's part of the route, not a silent
             # "au passage" pick-up), then the chosen map itself.
             for st in self._leg_stops(pos, c.world_coords, visited, job_xp, cur_levels,
-                                      metric, availability):
+                                      metric, availability, active_jobs):
                 stops.append(LoopStop(world_coords=tuple(st["coord"]),
                                       directions=st["directions"],
                                       harvests=st["harvests"], value=st["value"]))
@@ -280,7 +287,8 @@ class FarmLoopFinder:
             start_levels={j: self.xp_table.level_for_xp(start_xp[j]) for j in GATHERING_JOBS},
             end_levels=dict(cur_levels))
 
-    def _leg_stops(self, prev, dest, visited, job_xp, cur_levels, metric, availability=None):
+    def _leg_stops(self, prev, dest, visited, job_xp, cur_levels, metric, availability=None,
+                   active_jobs=None):
         """Walk the real BFS path ``prev`` -> ``dest`` and turn it into an ordered
         list of **explicit** stops: one per harvestable map crossed on the way
         (these used to be silent "au passage" pick-ups) plus ``dest`` itself.
@@ -311,7 +319,7 @@ class FarmLoopFinder:
             # at full XP and the map's ``a`` is NOT updated — a transit pickup is an
             # incidental free grab, not a deliberate fullness observation.
             v, items = self._cell_value(cell, cur_levels, job_xp, metric,
-                                        availability=availability)
+                                        availability=availability, active_jobs=active_jobs)
             if not items and not is_dest:
                 continue                       # nothing eligible here at these levels
             stops.append({"coord": list(co), "directions": path_directions(path[anchor:i + 1]),
@@ -327,26 +335,30 @@ class FarmLoopFinder:
         return stops
 
     # -------------------------------------------------- interactive rolling plan
-    def harvest_coord(self, job_xp: Dict[str, int], coord):
+    def harvest_coord(self, job_xp: Dict[str, int], coord, active_jobs=None):
         """Apply harvesting the whole map at ``coord`` to ``job_xp`` (returns a
-        new dict); the items harvested are whatever is *eligible* at those XP."""
+        new dict); the items harvested are whatever is *eligible* at those XP.
+        A deselected job (``active_jobs`` set and job not in it) banks no XP, so an
+        ignored job never gains levels even on a transit/free pickup."""
         nx = dict(job_xp)
         cell = self.cells_by_coord.get(tuple(coord))
         if cell:
             levels = {j: self.xp_table.level_for_xp(nx[j]) for j in GATHERING_JOBS}
             for cr in cell.resources:
                 r = self.resources[cr.resource_id]
+                if active_jobs is not None and r.job_id not in active_jobs:
+                    continue
                 if levels.get(r.job_id, 0) >= r.required_level:
                     nx[r.job_id] += r.base_xp * cr.quantity
         return nx
 
-    def advance(self, job_xp: Dict[str, int], visited, dest):
+    def advance(self, job_xp: Dict[str, int], visited, dest, active_jobs=None):
         """Commit the next explicit stop in the live planner: harvest the whole
         map at ``dest`` and mark it visited. Each harvestable map is now its own
         stop, so a single advance only ever harvests that one map. Returns the new
         ``(job_xp, visited)``."""
         dest = tuple(dest)
-        job_xp = self.harvest_coord(job_xp, dest)
+        job_xp = self.harvest_coord(job_xp, dest, active_jobs)
         vis = {tuple(c) for c in visited}
         vis.add(dest)
         return job_xp, [list(c) for c in sorted(vis)]
@@ -354,7 +366,7 @@ class FarmLoopFinder:
     def plan_window(self, pos, job_xp: Dict[str, int], visited, horizon: int = 20,
                     metric: str = "levels", lambda_travel: float = 1.0,
                     beam_width: int = 16, branch: int = 5, top_k: int = 150,
-                    availability=None):
+                    availability=None, active_jobs=None):
         """Beam-search the best next ``horizon`` maps from the given state, for
         the interactive rolling planner. A *beam* of the top ``beam_width``
         partial paths is expanded ``horizon`` steps (each node branches to its
@@ -374,7 +386,7 @@ class FarmLoopFinder:
 
         # candidate universe: the top_k richest un-visited maps right now.
         cand = self._candidate_pool(pos, job_xp, base_visited, root_levels, metric, top_k,
-                                    availability)
+                                    availability, active_jobs)
 
         # node: (path[(coord,items,value,travel)], pos, jx, added(set), val, trav)
         beam = [([], pos, dict(job_xp), set(), 0.0, 0)]
@@ -392,7 +404,8 @@ class FarmLoopFinder:
                     if travel is None:        # different component, unreachable on foot
                         continue
                     v, items = self._cell_value(c, levels, jx, metric,
-                                                availability=availability)
+                                                availability=availability,
+                                                active_jobs=active_jobs)
                     if v <= 0:
                         continue
                     imm = v - lam * travel
@@ -425,11 +438,11 @@ class FarmLoopFinder:
         # once flattened) but we only surface the next ``horizon`` of them.
         actions = [co for co, _items, _v, _travel in best[0]]
         return self._materialise_window(actions, pos, job_xp, base_visited, metric,
-                                        horizon, availability)
+                                        horizon, availability, active_jobs)
 
     # ----------------------------------- shared planner helpers (beam + MCTS)
     def _candidate_pool(self, pos, job_xp, base_visited, root_levels, metric, top_k,
-                        availability=None):
+                        availability=None, active_jobs=None):
         """The ``top_k`` richest un-visited maps at the current levels (free start
         => anchored in the richest connected component). Shared candidate universe
         for both the beam and MCTS planners; the search only ever moves between
@@ -440,21 +453,22 @@ class FarmLoopFinder:
         pool = self.cells
         if pos is None:                       # free start: anchor in richest comp
             comp = {c.world_coords
-                    for c in self._richest_component(root_levels, metric, availability)}
+                    for c in self._richest_component(root_levels, metric, availability,
+                                                     active_jobs)}
             pool = [c for c in self.cells if c.world_coords in comp]
         scored0 = []
         for c in pool:
             if c.world_coords in base_visited:
                 continue
             v, _i = self._cell_value(c, root_levels, job_xp, metric,
-                                     availability=availability)
+                                     availability=availability, active_jobs=active_jobs)
             if v > 0:
                 scored0.append((v, c))
         scored0.sort(key=lambda x: -x[0])
         return [c for _v, c in scored0[:top_k]]
 
     def _materialise_window(self, actions, pos, job_xp, base_visited, metric, horizon,
-                            availability=None):
+                            availability=None, active_jobs=None):
         """Flatten an ordered list of target-map coords into explicit per-map stops
         (maps crossed on the way are full steps, not silent pick-ups), on local
         copies of the state. Shared output path for the beam and MCTS planners so
@@ -465,7 +479,8 @@ class FarmLoopFinder:
         jx = dict(job_xp)
         levels = {j: self.xp_table.level_for_xp(jx[j]) for j in GATHERING_JOBS}
         for co in actions:
-            for st in self._leg_stops(prev, co, vis, jx, levels, metric, availability):
+            for st in self._leg_stops(prev, co, vis, jx, levels, metric, availability,
+                                      active_jobs):
                 window.append({"world_coords": st["coord"], "directions": st["directions"],
                                "harvests": st["harvests"], "value": round(st["value"], 4),
                                "travel": st["travel"]})
@@ -478,7 +493,7 @@ class FarmLoopFinder:
                          top_k: int = 150, simulations: int = 1500,
                          exploration: float = 0.7, rollout_depth: int = 12,
                          rollout_pool: int = 30, branch: int = 6,
-                         screen_budget: int = 35, availability=None):
+                         screen_budget: int = 35, availability=None, active_jobs=None):
         """Monte-Carlo Tree Search (UCT) planner — the AlphaZero search family
         *without* a neural net. It looks ahead by simulating, instead of being
         myopically greedy like the beam.
@@ -515,7 +530,7 @@ class FarmLoopFinder:
         base_visited = {tuple(v) for v in visited}
         root_levels = {j: self.xp_table.level_for_xp(job_xp[j]) for j in GATHERING_JOBS}
         pool = self._candidate_pool(pos, job_xp, base_visited, root_levels, metric, top_k,
-                                    availability)
+                                    availability, active_jobs)
         pool_coords = [c.world_coords for c in pool]
         if not pool_coords:
             return []
@@ -541,7 +556,7 @@ class FarmLoopFinder:
                 if travel is None:            # different component, unreachable on foot
                     continue
                 v, items = self._cell_value(self.cells_by_coord[co], lv, jx, metric,
-                                            availability=availability)
+                                            availability=availability, active_jobs=active_jobs)
                 if v <= 0:
                     continue
                 score = v - lam * travel
@@ -563,7 +578,7 @@ class FarmLoopFinder:
                 if travel is None:
                     continue
                 v, items = self._cell_value(self.cells_by_coord[co], lv, jx, metric,
-                                            availability=availability)
+                                            availability=availability, active_jobs=active_jobs)
                 if v <= 0:
                     continue
                 sc = v - lam * travel
@@ -665,4 +680,4 @@ class FarmLoopFinder:
             node = max(node.children.values(), key=lambda c: (c.w, c.coord))
             actions.append(node.coord)
         return self._materialise_window(actions, pos, job_xp, base_visited, metric,
-                                        horizon, availability)
+                                        horizon, availability, active_jobs)

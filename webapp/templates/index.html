@@ -100,6 +100,11 @@
 <script>
 const JOBS = Array.from(document.querySelectorAll('[name^=lvl_]')).map(i => i.name.slice(4));
 const form = document.getElementById('form');
+
+// Jobs the player wants to level (checkbox checked); the route ignores the rest.
+function selectedJobs() {
+  return JOBS.filter(j => form.querySelector(`[name=sel_${j}]`).checked);
+}
 const resultEl = document.getElementById('result');
 let sess = null, sessParams = null, liveHorizon = 20;   // live rolling planner
 
@@ -126,6 +131,7 @@ function saveForm() {
     JOBS.forEach(j => levels[j] = Number(form.querySelector(`[name=lvl_${j}]`).value || 0));
     localStorage.setItem(STORE_KEY, JSON.stringify({
       levels,
+      selected: selectedJobs(),
       lambda: form.lambda_travel.value,
       metric: document.getElementById('metric').value,
       engine: document.getElementById('engine').value,
@@ -142,6 +148,9 @@ function loadForm() {
     JOBS.forEach(j => {
       if (levels[j] != null) form.querySelector(`[name=lvl_${j}]`).value = levels[j];
     });
+    if (Array.isArray(saved.selected)) {
+      JOBS.forEach(j => form.querySelector(`[name=sel_${j}]`).checked = saved.selected.includes(j));
+    }
     if (saved.lambda != null) form.lambda_travel.value = saved.lambda;
     if (saved.metric != null) document.getElementById('metric').value = saved.metric;
     if (saved.engine != null) document.getElementById('engine').value = saved.engine;
@@ -189,6 +198,7 @@ form.addEventListener('submit', async (e) => {
   JOBS.forEach(j => job_levels[j] = Number(form.querySelector(`[name=lvl_${j}]`).value || 0));
   sessParams = {
     job_levels,
+    active_jobs: selectedJobs(),
     lambda_travel: Number(form.lambda_travel.value || 0),
     metric: document.getElementById('metric').value,
     engine: document.getElementById('engine').value,

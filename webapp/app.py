@@ -48,7 +48,9 @@ def render_index() -> str:
     with open(os.path.join(TEMPLATE_DIR, "index.html"), encoding="utf-8") as fh:
         tpl = fh.read()
     rows = "\n".join(
-        f'<div class="jobrow"><label>{html.escape(JOB_LABELS_FR[j])}</label>'
+        f'<div class="jobrow">'
+        f'<label><input type="checkbox" name="sel_{j}" checked '
+        f'title="Décocher pour ignorer ce métier"> {html.escape(JOB_LABELS_FR[j])}</label>'
         f'<input type="number" min="0" max="200" name="lvl_{j}" value="1"></div>'
         for j in GATHERING_JOBS
     )
@@ -108,6 +110,11 @@ def plan(payload: dict) -> dict:
     lam = float(payload.get("lambda_travel", 1.0))
     metric = "xp" if payload.get("metric") == "xp" else "levels"
     raw_engine = payload.get("engine")
+    # Selected jobs to level (UI checkboxes): a list of job_ids restricts the route
+    # to those jobs; absent => None (every job, back-compat). The set is posted on
+    # every call (it lives in the client's session params), so it also gates advance.
+    sel = payload.get("active_jobs")
+    active_jobs = set(sel) if isinstance(sel, list) else None
 
     st = payload.get("state")
     if not st:                                   # session start
@@ -129,7 +136,7 @@ def plan(payload: dict) -> dict:
             if kind is None:                     # back-compat: harvest bool -> advance/skip
                 kind = "advance" if commit.get("harvest") else "skip"
             if kind == "advance":                # harvested full => observation 1
-                job_xp, visited = f.advance(job_xp, visited, coord)
+                job_xp, visited = f.advance(job_xp, visited, coord, active_jobs)
                 pos = coord
                 avail[key] = ewma_update(avail.get(key, 1.0), 1.0)
             elif kind == "empty":                # botted/empty => observation 0, don't advance
@@ -150,11 +157,11 @@ def plan(payload: dict) -> dict:
     if engine == "mcts":
         window = f.plan_window_mcts(pos, job_xp, visited, horizon=horizon,
                                     metric=metric, lambda_travel=lam,
-                                    availability=availability)
+                                    availability=availability, active_jobs=active_jobs)
     else:
         window = f.plan_window(pos, job_xp, visited, horizon=horizon,
                                metric=metric, lambda_travel=lam,
-                               availability=availability)
+                               availability=availability, active_jobs=active_jobs)
     return {
         "window": window,
         "state": {"pos": pos, "job_xp": job_xp, "visited": visited, "availability": avail},
